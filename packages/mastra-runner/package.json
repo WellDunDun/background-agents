@@ -1,0 +1,37 @@
+{
+  "name": "@open-inspect/mastra-runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "open-inspect-mastra-runner": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix"
+  },
+  "dependencies": {
+    "@mastra/acp": "^0.2.1",
+    "@mastra/core": "^1.42.0",
+    "@mastra/daytona": "^0.4.1",
+    "@mastra/libsql": "^1.13.0",
+    "@mastra/memory": "^1.20.3",
+    "mastracode": "^0.22.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.18"
+  }
+}
