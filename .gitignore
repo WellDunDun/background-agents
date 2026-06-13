@@ -17,7 +17,9 @@ venv/
 dist/
 build/
 .next/
+.open-next/
 out/
+packages/web/wrangler.production.toml
 
 # IDE
 .idea/
