@@ -10,6 +10,7 @@ This branch intentionally starts clean instead of retrofitting the old backgroun
 - Durable Flue agents for orchestration, implementation, and review.
 - Daytona-backed workspaces for repo execution.
 - GitHub App tools for repo access, checkout, branch push, PR creation, and PR comments.
+- Runtime-verified GitHub webhook ingress for issue and PR review signals.
 - A finite kickoff workflow for Studio/CLI smoke tests.
 - Project skills for implementation, review, and scaffolding work.
 - Cloudflare migrations for Flue-generated Durable Objects.
@@ -61,11 +62,13 @@ GET /api/config/status returns non-secret configuration readiness for the operat
 
 ## GitHub Webhook
 
-The Flue GitHub channel is mounted at:
+The GitHub webhook route is mounted at:
 
 https://<worker-host>/channels/github/webhook
 
 Configure the GitHub App webhook with application/json content and the same GITHUB_WEBHOOK_SECRET. Subscribe initially to Issues, Issue comments, and Pull request review comments.
+
+The route verifies X-Hub-Signature-256 with the runtime Cloudflare Worker secret binding before it dispatches durable Flue work. This avoids baking the webhook secret into the Worker bundle.
 
 The factory only admits GitHub signals that contain FACTORY_GITHUB_TRIGGER_PHRASE or mention GITHUB_BOT_USERNAME. This keeps ordinary issue traffic from starting autonomous work.
 

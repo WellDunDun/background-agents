@@ -382,7 +382,8 @@ function base64UrlEncode(input: Uint8Array | string): string {
 }
 
 function parsePemPrivateKey(pem: string): Uint8Array {
-  const pemContents = pem
+  const normalizedPem = pem.replace(/\\n/g, "\n");
+  const pemContents = normalizedPem
     .replace(/-----BEGIN RSA PRIVATE KEY-----/g, "")
     .replace(/-----END RSA PRIVATE KEY-----/g, "")
     .replace(/-----BEGIN PRIVATE KEY-----/g, "")

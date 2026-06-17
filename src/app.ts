@@ -8,6 +8,7 @@ import {
   parseFactoryJobRequest,
 } from "./shared/factory-types.js";
 import type { FactoryEnv } from "./shared/env.js";
+import { handleGitHubWebhook } from "./shared/github-webhook.js";
 import { requireFactoryApiToken } from "./shared/http-auth.js";
 import {
   isAcceptedSentryLevel,
@@ -93,6 +94,8 @@ app.get("/api/config/status", (c) => {
     },
   });
 });
+
+app.post("/channels/github/webhook", handleGitHubWebhook);
 
 app.post("/webhooks/sentry", async (c) => {
   const contentLength = Number(c.req.header("content-length") ?? "0");
