@@ -168,6 +168,14 @@ Runtime GitHub trigger config proof:
 - The same smoke still reached `openai-codex/gpt-5.5`, completed with `agent_end`, returned `duplicateReused=true` on the retry-safe admission check, listed the smoke job through the ledger, proved Sentry route PATCH/restore, and rejected the known read-only repo with 403.
 - `GET /api/readiness` remains blocked only by `worker:github-repositories` because the GitHub App installation still has no writable repositories.
 
+Agent GitHub write-readiness proof:
+
+- Worker code deploy succeeded after exposing GitHub repository write-readiness to agent tools: version `9a4519a3-0f1a-433f-8aea-e050fe75c54c`.
+- Daytona runner deploy succeeded with the updated GitHub tool surface and refreshed the Worker's runner URL/token secrets.
+- `npm run smoke:production` passed against the live Worker and runner on 2026-06-18.
+- The smoke still reported one visible repository and zero writable repositories, and the read-only admission guard rejected `WellDunDun/canary-compact` with 403 before runner dispatch.
+- The same smoke still reached `openai-codex/gpt-5.5`, completed with `agent_end`, returned `duplicateReused=true`, listed the smoke job through the ledger, and proved GitHub/Sentry runtime config PATCH/restore.
+
 Remaining product setup:
 
 - Update the GitHub App installation so at least one target repository has write access. Then run the repo-backed production proof that creates a draft PR and stops before merge.
