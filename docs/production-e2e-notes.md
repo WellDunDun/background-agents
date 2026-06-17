@@ -1,0 +1,51 @@
+# Production E2E Notes
+
+Last checked: 2026-06-17
+
+## What Works
+
+- The Cloudflare Worker deploys from the generated Flue config at `dist/flue_factory/wrangler.json`.
+- `GET /health` returns 200 in production.
+- `GET /api/config/status` returns 200 with the production `FACTORY_API_TOKEN`.
+- Runtime Worker secrets are configured for:
+  - Codex refresh-token auth
+  - Daytona
+  - GitHub App access
+  - GitHub webhook verification
+  - Sentry webhook verification
+- A no-repository `POST /api/jobs` production smoke request returns 202 and opens a durable Flue agent event stream.
+
+## Current Blocker
+
+Codex subscription-backed model calls do not complete from the Cloudflare Worker runtime.
+
+Observed production stream behavior:
+
+- The agent starts and selects `openai-codex/gpt-5.5`.
+- The first model call reaches the `openai-codex-responses` provider.
+- `transport: "auto"` first failed through the Worker WebSocket path.
+- Forcing `transport: "sse"` removed the WebSocket failure, but `chatgpt.com/backend-api` still returned a Cloudflare block page to the Worker.
+
+The same Codex refresh token works from local Node with the same `openai-codex/gpt-5.5` model and `transport: "sse"`, so the token itself is valid.
+
+## Implication
+
+For the Codex subscription path, the factory should not execute ChatGPT/Codex provider calls inside Cloudflare Workers. Keep the Worker as the secure ingress/control plane, but run the subscription-backed coding runtime in a normal Node environment, ideally the Daytona runner/sandbox layer, then stream durable events back through the Worker.
+
+The alternative is to use an official OpenAI API key or Cloudflare AI Gateway-compatible provider from the Worker. That is not equivalent to the user's Codex subscription.
+
+## Follow-Up Architecture
+
+- Cloudflare Worker:
+  - GitHub/Sentry/manual signal admission
+  - auth and configuration status
+  - durable job records and event relay
+- Daytona/Node runner:
+  - Flue or Codex harness execution
+  - Codex subscription refresh token use
+  - repository checkout, implementation, review, commits, and PR creation
+- UI:
+  - read job status/events from the Worker
+  - link directly to runner logs or Flue/agent stream coordinates
+
+Sentry is not fully actionable until `SENTRY_DEFAULT_REPO` or a per-project routing table is configured.
