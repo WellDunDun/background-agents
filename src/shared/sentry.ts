@@ -1,3 +1,5 @@
+import type { FactoryEnv } from "./env.js";
+
 export interface NormalizedSentrySignal {
   eventType: string;
   triggerKey: string;
@@ -7,6 +9,11 @@ export interface NormalizedSentrySignal {
   culpritFile?: string;
   contextBlock: string;
   meta: Record<string, unknown>;
+}
+
+export interface SentryRepositoryRoute {
+  repo: string;
+  baseBranch: string;
 }
 
 interface SentryIssueAlertPayload {
@@ -151,6 +158,72 @@ export function isAcceptedSentryLevel(level: string, acceptedLevels: string | un
     .map((entry) => entry.trim().toLowerCase())
     .filter(Boolean);
   return allowed.includes(level.toLowerCase());
+}
+
+export function resolveSentryRepositoryRoute(
+  signal: Pick<NormalizedSentrySignal, "sentryProject">,
+  env: FactoryEnv,
+): SentryRepositoryRoute | null {
+  const mapRoute = resolveSentryRepositoryRouteFromMap(signal.sentryProject, env.SENTRY_REPO_MAP);
+  if (mapRoute) {
+    return mapRoute;
+  }
+
+  const defaultRepo = env.SENTRY_DEFAULT_REPO?.trim();
+  if (!defaultRepo) {
+    return null;
+  }
+
+  return {
+    repo: defaultRepo,
+    baseBranch: env.SENTRY_DEFAULT_BASE_BRANCH?.trim() || "main",
+  };
+}
+
+function resolveSentryRepositoryRouteFromMap(
+  sentryProject: string,
+  routeMap: string | undefined,
+): SentryRepositoryRoute | null {
+  const trimmed = routeMap?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const parsed = parseSentryRouteMap(trimmed);
+  const route = parsed[sentryProject] ?? parsed["*"] ?? parsed._default;
+  return normalizeSentryRoute(route);
+}
+
+function parseSentryRouteMap(value: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value);
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function normalizeSentryRoute(value: unknown): SentryRepositoryRoute | null {
+  if (typeof value === "string") {
+    const repo = value.trim();
+    return repo ? { repo, baseBranch: "main" } : null;
+  }
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const route = value as { repo?: unknown; baseBranch?: unknown };
+  if (typeof route.repo !== "string" || !route.repo.trim()) {
+    return null;
+  }
+
+  return {
+    repo: route.repo.trim(),
+    baseBranch: typeof route.baseBranch === "string" && route.baseBranch.trim() ? route.baseBranch.trim() : "main",
+  };
 }
 
 function isIssueAlertPayload(payload: Record<string, unknown>): boolean {

@@ -23,6 +23,7 @@ import { canWriteRepository, getGitHubAppConfig, listInstallationRepositories } 
 import {
   isAcceptedSentryLevel,
   normalizeSentrySignal,
+  resolveSentryRepositoryRoute,
   verifySentrySignature,
 } from "./shared/sentry.js";
 
@@ -140,10 +141,6 @@ app.post("/webhooks/sentry", async (c) => {
     return c.json({ error: "Invalid signature." }, 401);
   }
 
-  if (!env.SENTRY_DEFAULT_REPO) {
-    return c.json({ error: "SENTRY_DEFAULT_REPO is not configured." }, 503);
-  }
-
   const payload = parseJsonObject(body);
   if (!payload) {
     return c.json({ error: "Invalid JSON." }, 400);
@@ -158,12 +155,25 @@ app.post("/webhooks/sentry", async (c) => {
     return c.json({ ok: true, skipped: true, reason: "level_not_accepted" });
   }
 
+  const route = resolveSentryRepositoryRoute(signal, env);
+  if (!route) {
+    return c.json(
+      {
+        error:
+          "No Sentry repository route configured for project " +
+          (signal.sentryProject || "<unknown>") +
+          ". Set SENTRY_REPO_MAP or SENTRY_DEFAULT_REPO.",
+      },
+      503,
+    );
+  }
+
   const request = {
     prompt:
       signal.contextBlock +
       "\n\nInvestigate the likely code cause, implement the smallest safe fix in the repository, run focused verification, and prepare a draft PR for human review.",
-    repo: env.SENTRY_DEFAULT_REPO,
-    baseBranch: env.SENTRY_DEFAULT_BASE_BRANCH || "main",
+    repo: route.repo,
+    baseBranch: route.baseBranch,
     source: "sentry" as const,
     signalId: signal.triggerKey,
     metadata: {
@@ -231,6 +241,7 @@ function configStatus(env: FactoryEnv) {
     },
     sentry: {
       webhookConfigured: Boolean(env.SENTRY_WEBHOOK_SECRET),
+      repoMapConfigured: Boolean(env.SENTRY_REPO_MAP),
       defaultRepo: env.SENTRY_DEFAULT_REPO || null,
       acceptedLevels: env.SENTRY_ACCEPT_LEVELS || "error,fatal,critical",
     },
