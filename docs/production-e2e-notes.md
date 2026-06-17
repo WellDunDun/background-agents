@@ -159,6 +159,15 @@ Runtime Sentry route config proof:
 - The same smoke still reached `openai-codex/gpt-5.5`, completed with `agent_end`, returned `duplicateReused=true` on the retry-safe admission check, listed the smoke job through the ledger, and rejected the known read-only repo with 403.
 - `GET /api/readiness` remains blocked only by `worker:github-repositories` because the GitHub App installation still has no writable repositories. It still warns on `worker:sentry-route` after the smoke restores the route config to its original empty state.
 
+Runtime GitHub trigger config proof:
+
+- Worker code deploy succeeded after adding app-owned GitHub trigger configuration: version `4354a5e5-c3f6-483f-a308-9cc3f0a98613`.
+- Daytona runner deploy succeeded with `FACTORY_GITHUB_TRIGGER_CONFIG_PATH=/home/daytona/signal-factory-runner-data/github-trigger.json` and refreshed the Worker's runner URL/token secrets.
+- `npm run smoke:production` passed against the live Worker and runner on 2026-06-18.
+- The smoke read the current GitHub trigger config, patched a temporary `/factory-smoke` trigger phrase and `factory-smoke-bot` bot username, verified both persisted, and restored the original `/factory` trigger with no bot username. Both PATCH calls returned 200.
+- The same smoke still reached `openai-codex/gpt-5.5`, completed with `agent_end`, returned `duplicateReused=true` on the retry-safe admission check, listed the smoke job through the ledger, proved Sentry route PATCH/restore, and rejected the known read-only repo with 403.
+- `GET /api/readiness` remains blocked only by `worker:github-repositories` because the GitHub App installation still has no writable repositories.
+
 Remaining product setup:
 
 - Update the GitHub App installation so at least one target repository has write access. Then run the repo-backed production proof that creates a draft PR and stops before merge.
