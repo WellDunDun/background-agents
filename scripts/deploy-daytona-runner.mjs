@@ -12,6 +12,8 @@ const DEFAULT_SANDBOX_NAME = "signal-factory-runner";
 const DEFAULT_APP_DIR = "/home/daytona/signal-factory-runner";
 const DEFAULT_PORT = 3584;
 const DEFAULT_RUNNER_CPU = 2;
+const DEFAULT_RUNNER_DISK_GIB = 10;
+const DEFAULT_RUNNER_IMAGE = "node:22-bookworm";
 const DEFAULT_RUNNER_MEMORY_GIB = 4;
 const SESSION_ID = "signal-factory-runner";
 const REQUIRED_RUNNER_ENV_KEYS = [
@@ -57,9 +59,8 @@ async function main() {
     ...(env.DAYTONA_TARGET ? { target: env.DAYTONA_TARGET } : {}),
   });
 
-  const sandbox = await getOrCreateSandbox(daytona, sandboxName, options.recreate);
+  const sandbox = await getOrCreateSandbox(daytona, sandboxName, options.recreate, env);
   await ensureStarted(sandbox);
-  await ensureRunnerResources(sandbox, env);
   await deploySourceArchive(sandbox, appDir);
   await writeRunnerEnv(sandbox, appDir, runnerEnv);
   await runOrThrow(sandbox, "npm ci", appDir, 900);
@@ -199,15 +200,21 @@ function buildRunnerEnv(env) {
   return runnerEnv;
 }
 
-async function getOrCreateSandbox(daytona, sandboxName, recreate) {
+async function getOrCreateSandbox(daytona, sandboxName, recreate, env) {
   let existing;
+  const cpu = numberFrom(env.FACTORY_RUNNER_CPU) ?? DEFAULT_RUNNER_CPU;
+  const memory = numberFrom(env.FACTORY_RUNNER_MEMORY_GIB) ?? DEFAULT_RUNNER_MEMORY_GIB;
+  const disk = numberFrom(env.FACTORY_RUNNER_DISK_GIB) ?? DEFAULT_RUNNER_DISK_GIB;
   try {
     existing = await daytona.get(sandboxName);
   } catch {
     existing = undefined;
   }
 
-  if (existing && recreate) {
+  const undersized =
+    existing && ((existing.cpu ?? 0) < cpu || (existing.memory ?? 0) < memory || (existing.disk ?? 0) < disk);
+
+  if (existing && (recreate || undersized)) {
     await existing.delete(120);
     existing = undefined;
   }
@@ -219,7 +226,7 @@ async function getOrCreateSandbox(daytona, sandboxName, recreate) {
   return daytona.create(
     {
       name: sandboxName,
-      language: "typescript",
+      image: env.FACTORY_RUNNER_IMAGE || DEFAULT_RUNNER_IMAGE,
       public: true,
       labels: {
         app: "signal-factory",
@@ -228,6 +235,11 @@ async function getOrCreateSandbox(daytona, sandboxName, recreate) {
       autoStopInterval: 0,
       autoArchiveInterval: 0,
       autoDeleteInterval: -1,
+      resources: {
+        cpu,
+        disk,
+        memory,
+      },
     },
     { timeout: 180 },
   );
@@ -236,24 +248,6 @@ async function getOrCreateSandbox(daytona, sandboxName, recreate) {
 async function ensureStarted(sandbox) {
   if (sandbox.state !== "started") {
     await sandbox.start(180);
-  }
-}
-
-async function ensureRunnerResources(sandbox, env) {
-  const cpu = numberFrom(env.FACTORY_RUNNER_CPU) ?? DEFAULT_RUNNER_CPU;
-  const memory = numberFrom(env.FACTORY_RUNNER_MEMORY_GIB) ?? DEFAULT_RUNNER_MEMORY_GIB;
-  const next = {};
-
-  if ((sandbox.cpu ?? 0) < cpu) {
-    next.cpu = cpu;
-  }
-  if ((sandbox.memory ?? 0) < memory) {
-    next.memory = memory;
-  }
-
-  if (Object.keys(next).length > 0) {
-    await sandbox.resize(next, 180);
-    await sandbox.refreshData();
   }
 }
 

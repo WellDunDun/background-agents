@@ -102,7 +102,7 @@ Deploy the Node runner to Daytona:
 
 The deploy script packages the committed source with git archive, uploads it to a public Daytona sandbox, writes runtime secrets to a private .runner.env file inside that sandbox, builds the Node target, starts it as a Daytona background session, and waits for /health. Use --configure-worker to have the script write FACTORY_RUNNER_URL and FACTORY_RUNNER_TOKEN via wrangler secret put.
 
-The runner script resizes the Daytona sandbox to 2 vCPU and 4 GiB RAM by default before installing dependencies. Override this with FACTORY_RUNNER_CPU and FACTORY_RUNNER_MEMORY_GIB in the local deploy environment if your Daytona quota requires different limits.
+The runner script creates a Daytona sandbox from `node:22-bookworm` with 2 vCPU, 4 GiB RAM, and 10 GiB disk by default. Override this with FACTORY_RUNNER_IMAGE, FACTORY_RUNNER_CPU, FACTORY_RUNNER_MEMORY_GIB, and FACTORY_RUNNER_DISK_GIB in the local deploy environment if your Daytona quota requires different limits. If an existing runner sandbox is undersized, the script recreates it.
 
 Required runner env values:
 
