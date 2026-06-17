@@ -11,6 +11,8 @@ const projectRoot = path.resolve(__dirname, "..");
 const DEFAULT_SANDBOX_NAME = "signal-factory-runner";
 const DEFAULT_APP_DIR = "/home/daytona/signal-factory-runner";
 const DEFAULT_PORT = 3584;
+const DEFAULT_RUNNER_CPU = 2;
+const DEFAULT_RUNNER_MEMORY_GIB = 4;
 const SESSION_ID = "signal-factory-runner";
 const REQUIRED_RUNNER_ENV_KEYS = [
   "FACTORY_RUNNER_TOKEN",
@@ -57,6 +59,7 @@ async function main() {
 
   const sandbox = await getOrCreateSandbox(daytona, sandboxName, options.recreate);
   await ensureStarted(sandbox);
+  await ensureRunnerResources(sandbox, env);
   await deploySourceArchive(sandbox, appDir);
   await writeRunnerEnv(sandbox, appDir, runnerEnv);
   await runOrThrow(sandbox, "npm ci", appDir, 900);
@@ -236,6 +239,24 @@ async function ensureStarted(sandbox) {
   }
 }
 
+async function ensureRunnerResources(sandbox, env) {
+  const cpu = numberFrom(env.FACTORY_RUNNER_CPU) ?? DEFAULT_RUNNER_CPU;
+  const memory = numberFrom(env.FACTORY_RUNNER_MEMORY_GIB) ?? DEFAULT_RUNNER_MEMORY_GIB;
+  const next = {};
+
+  if ((sandbox.cpu ?? 0) < cpu) {
+    next.cpu = cpu;
+  }
+  if ((sandbox.memory ?? 0) < memory) {
+    next.memory = memory;
+  }
+
+  if (Object.keys(next).length > 0) {
+    await sandbox.resize(next, 180);
+    await sandbox.refreshData();
+  }
+}
+
 async function deploySourceArchive(sandbox, appDir) {
   const archivePath = createGitArchive();
   const remoteArchivePath = "/tmp/signal-factory-runner-source.tar";
@@ -373,7 +394,12 @@ async function runOrThrow(sandbox, command, cwd, timeout) {
   const result = await sandbox.process.executeCommand(command, cwd, undefined, timeout);
   if (result.exitCode !== 0) {
     throw new Error(
-      "Command failed in runner sandbox: " + command + "\n" + String(result.result ?? result.artifacts?.stdout ?? ""),
+      "Command failed in runner sandbox with exit code " +
+        result.exitCode +
+        ": " +
+        command +
+        "\n" +
+        String(result.result ?? result.artifacts?.stdout ?? ""),
     );
   }
   return result;
