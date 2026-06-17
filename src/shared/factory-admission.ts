@@ -35,6 +35,7 @@ export interface FactoryAdmissionReceipt {
   acceptedAt: string;
   streamUrl: string;
   executionTarget: "local" | "runner";
+  reused?: boolean;
 }
 
 export class FactoryAdmissionError extends Error {
@@ -89,6 +90,18 @@ export async function dispatchLocalFactoryJob(
   env?: FactoryEnv,
 ): Promise<FactoryAdmissionReceipt> {
   if (env) {
+    const existing = await getFactoryJobRecord(env, input.jobId);
+    if (existing) {
+      const reusable = receiptFromAcceptedRecord(existing);
+      if (reusable) {
+        return { ...reusable, reused: true };
+      }
+      throw new FactoryAdmissionError(
+        "Factory job " + input.jobId + " is already submitted but not yet accepted.",
+        409,
+      );
+    }
+
     await recordFactoryJobSubmitted(env, input);
   }
 
@@ -314,6 +327,31 @@ function parseRunnerReceipt(value: unknown): Omit<FactoryAdmissionReceipt, "exec
     dispatchId: value.dispatchId,
     acceptedAt: value.acceptedAt,
     streamUrl: value.streamUrl,
+    ...(value.reused === true ? { reused: true } : {}),
+  };
+}
+
+function receiptFromAcceptedRecord(record: FactoryJobRecord): FactoryAdmissionReceipt | null {
+  if (
+    record.status !== "accepted" ||
+    record.agent !== "orchestrator" ||
+    !record.dispatchId ||
+    !record.acceptedAt ||
+    !record.streamUrl ||
+    !record.executionTarget
+  ) {
+    return null;
+  }
+
+  return {
+    ok: true,
+    jobId: record.jobId,
+    agent: record.agent,
+    instanceId: record.instanceId,
+    dispatchId: record.dispatchId,
+    acceptedAt: record.acceptedAt,
+    streamUrl: record.streamUrl,
+    executionTarget: record.executionTarget,
   };
 }
 

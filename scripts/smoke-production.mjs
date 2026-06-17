@@ -179,18 +179,21 @@ async function readJson(url, init) {
 }
 
 async function runNoRepoAgentSmoke(workerUrl, apiToken, timeoutMs) {
+  const idempotencyKey = "smoke-" + crypto.randomUUID();
+  const body = JSON.stringify({
+    prompt:
+      "Production smoke test. Do not edit files or call GitHub. Reply with one concise sentence confirming the factory still runs through Codex.",
+    source: "manual",
+    metadata: { smoke: true, purpose: "scripted-production-smoke" },
+  });
   const admitted = await readJson(workerUrl + "/api/jobs", {
     method: "POST",
     headers: {
       ...authHeaders(apiToken),
       "Content-Type": "application/json",
+      "Idempotency-Key": idempotencyKey,
     },
-    body: JSON.stringify({
-      prompt:
-        "Production smoke test. Do not edit files or call GitHub. Reply with one concise sentence confirming the factory still runs through Codex.",
-      source: "manual",
-      metadata: { smoke: true, purpose: "scripted-production-smoke" },
-    }),
+    body,
   });
   assertStatus("agent admission", admitted.status, 202);
 
@@ -204,10 +207,29 @@ async function runNoRepoAgentSmoke(workerUrl, apiToken, timeoutMs) {
     throw new Error("Agent smoke did not complete cleanly: " + JSON.stringify(streamResult));
   }
 
+  const duplicate = await readJson(workerUrl + "/api/jobs", {
+    method: "POST",
+    headers: {
+      ...authHeaders(apiToken),
+      "Content-Type": "application/json",
+      "Idempotency-Key": idempotencyKey,
+    },
+    body,
+  });
+  assertStatus("duplicate agent admission", duplicate.status, 202);
+  if (duplicate.body?.instanceId !== receipt.instanceId || duplicate.body?.reused !== true) {
+    throw new Error("Duplicate admission did not reuse the original job: " + JSON.stringify(duplicate.body));
+  }
+
   return {
     admitted: true,
     executionTarget: receipt.executionTarget,
     instanceId: receipt.instanceId,
+    idempotency: {
+      key: idempotencyKey,
+      duplicateStatus: duplicate.status,
+      duplicateReused: duplicate.body.reused === true,
+    },
     ...streamResult,
   };
 }

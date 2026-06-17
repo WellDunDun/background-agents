@@ -52,8 +52,11 @@ app.post("/api/jobs", async (c) => {
     return c.json({ error: parsed.error }, 400);
   }
 
-  const jobId = crypto.randomUUID();
-  const input = makeFactoryJobInput(jobId, parsed.value);
+  const jobId = resolveManualJobId(c, parsed.value);
+  if (!jobId.ok) {
+    return c.json({ error: jobId.error }, 400);
+  }
+  const input = makeFactoryJobInput(jobId.value, parsed.value);
   const admission = await admitFactoryJob(resolveFactoryEnv(c.env), input).catch((error: unknown) =>
     factoryAdmissionErrorResponse(c, error),
   );
@@ -360,4 +363,24 @@ function parsePositiveInteger(value: string | undefined): number | undefined {
   }
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function resolveManualJobId(
+  c: Context<{ Bindings: FactoryEnv }>,
+  request: { signalId?: string },
+): { ok: true; value: string } | { ok: false; error: string } {
+  const idempotencyKey = c.req.header("idempotency-key")?.trim() || request.signalId?.trim();
+  if (!idempotencyKey) {
+    return { ok: true, value: crypto.randomUUID() };
+  }
+
+  if (!/^[A-Za-z0-9._:@/#-]{1,200}$/.test(idempotencyKey)) {
+    return {
+      ok: false,
+      error:
+        "Idempotency-Key and signalId may contain only letters, numbers, dot, underscore, colon, at, slash, hash, or hyphen, up to 200 characters.",
+    };
+  }
+
+  return { ok: true, value: "manual:" + idempotencyKey };
 }

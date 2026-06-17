@@ -69,6 +69,8 @@ Expected JSON body:
 
 The route returns 202 Accepted with the factory job id and Flue dispatch receipt. If FACTORY_RUNNER_URL is configured, the Worker forwards the admitted job to the runner's protected /api/runner/jobs route. Otherwise the local Flue runtime dispatches it directly, which is intended for the Node runner and local development.
 
+For retry-safe clients, send `Idempotency-Key: <stable-key>` or a `signalId` in the JSON body. The manual API converts that key into a stable factory job id. If the same job was already accepted, the route returns the original admission receipt with `reused=true` instead of starting another agent run. GitHub and Sentry webhooks use deterministic signal ids for the same retry-safe behavior.
+
 When a runner is configured, clients should read events through the Worker-local stream proxy:
 
 GET /api/jobs/{instanceId}/events
