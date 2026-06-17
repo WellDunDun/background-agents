@@ -1,6 +1,6 @@
 # Production E2E Notes
 
-Last checked: 2026-06-17
+Last checked: 2026-06-18
 
 ## What Works
 
@@ -149,6 +149,15 @@ Automation controls proof:
 - The smoke listed two automation sources, paused Sentry through `PATCH /api/automations/sentry`, restored it through the same Worker route, and confirmed both updates returned 200.
 - The same smoke still reached `openai-codex/gpt-5.5`, completed with `agent_end`, returned `duplicateReused=true` on the retry-safe admission check, listed the smoke job through the ledger, and rejected the known read-only repo with 403.
 - GitHub and Sentry webhook paths now acknowledge paused automations with `skipped=true` and do not dispatch long-running agent work.
+
+Runtime Sentry route config proof:
+
+- Worker deploy succeeded after adding app-owned Sentry route configuration: version `85c9c02f-2db4-4478-8483-7a7cd11f752f`.
+- Daytona runner deploy succeeded with `FACTORY_SENTRY_ROUTE_CONFIG_PATH=/home/daytona/signal-factory-runner-data/sentry-routes.json` and refreshed the Worker's runner URL/token secrets.
+- `npm run smoke:production` passed against the live Worker and runner on 2026-06-18.
+- The smoke read the current Sentry route config, patched a temporary `smoke-project` route to the visible GitHub App repository, verified the route persisted, and restored the original config. Both PATCH calls returned 200.
+- The same smoke still reached `openai-codex/gpt-5.5`, completed with `agent_end`, returned `duplicateReused=true` on the retry-safe admission check, listed the smoke job through the ledger, and rejected the known read-only repo with 403.
+- `GET /api/readiness` remains blocked only by `worker:github-repositories` because the GitHub App installation still has no writable repositories. It still warns on `worker:sentry-route` after the smoke restores the route config to its original empty state.
 
 Remaining product setup:
 
