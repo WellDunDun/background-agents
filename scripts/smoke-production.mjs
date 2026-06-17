@@ -31,6 +31,7 @@ async function main() {
   assertStatus("readiness", readiness.status, 200);
 
   const automations = await runAutomationSmoke(workerUrl, apiToken);
+  const githubConfig = await runGitHubConfigSmoke(workerUrl, apiToken);
 
   const repositories = await readJson(workerUrl + "/api/github/repositories", {
     headers: authHeaders(apiToken),
@@ -66,6 +67,7 @@ async function main() {
         },
         readiness: summarizeReadiness(readiness.body),
         automations,
+        githubConfig,
         sentryRoutes,
         agentSmoke,
         jobLedger,
@@ -138,6 +140,45 @@ async function runAutomationSmoke(workerUrl, apiToken) {
   };
 }
 
+async function runGitHubConfigSmoke(workerUrl, apiToken) {
+  const original = await readJson(workerUrl + "/api/integrations/github/config", {
+    headers: authHeaders(apiToken),
+  });
+  assertStatus("github trigger config", original.status, 200);
+
+  const originalTriggerPhrase = typeof original.body.triggerPhrase === "string" ? original.body.triggerPhrase : "/factory";
+  const originalBotUsername = typeof original.body.botUsername === "string" ? original.body.botUsername : null;
+
+  const updated = await patchGitHubConfig(workerUrl, apiToken, {
+    triggerPhrase: "/factory-smoke",
+    botUsername: "factory-smoke-bot",
+  });
+  if (updated.body?.triggerPhrase !== "/factory-smoke" || updated.body?.botUsername !== "factory-smoke-bot") {
+    throw new Error("GitHub trigger config update did not persist: " + JSON.stringify(updated.body));
+  }
+
+  const restored = await patchGitHubConfig(workerUrl, apiToken, {
+    triggerPhrase: originalTriggerPhrase,
+    botUsername: originalBotUsername,
+  });
+  if (restored.body?.triggerPhrase !== originalTriggerPhrase) {
+    throw new Error("GitHub trigger config restore did not persist: " + JSON.stringify(restored.body));
+  }
+  if (originalBotUsername && restored.body?.botUsername !== originalBotUsername) {
+    throw new Error("GitHub bot username restore did not persist: " + JSON.stringify(restored.body));
+  }
+  if (!originalBotUsername && restored.body?.botUsername) {
+    throw new Error("GitHub bot username clear did not persist: " + JSON.stringify(restored.body));
+  }
+
+  return {
+    triggerPhrase: originalTriggerPhrase,
+    botConfigured: Boolean(originalBotUsername),
+    updateStatus: updated.status,
+    restoreStatus: restored.status,
+  };
+}
+
 async function runSentryRouteSmoke(workerUrl, apiToken, repositories) {
   const list = await readJson(workerUrl + "/api/integrations/sentry/routes", {
     headers: authHeaders(apiToken),
@@ -178,6 +219,19 @@ async function runSentryRouteSmoke(workerUrl, apiToken, repositories) {
     restoreStatus: restored.status,
     smokeProjectPersisted: true,
   };
+}
+
+async function patchGitHubConfig(workerUrl, apiToken, patch) {
+  const response = await readJson(workerUrl + "/api/integrations/github/config", {
+    method: "PATCH",
+    headers: {
+      ...authHeaders(apiToken),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(patch),
+  });
+  assertStatus("github trigger config patch", response.status, 200);
+  return response;
 }
 
 async function patchSentryRoutes(workerUrl, apiToken, patch) {

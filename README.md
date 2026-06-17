@@ -46,6 +46,7 @@ Set these as local .dev.vars values for development and as Cloudflare Worker sec
 - DAYTONA_API_KEY: Daytona workspace provider key.
 - GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, GITHUB_APP_INSTALLATION_ID: GitHub App credentials for repository access and PR creation.
 - GITHUB_WEBHOOK_SECRET: GitHub webhook secret for verified inbound signal delivery.
+- FACTORY_GITHUB_TRIGGER_CONFIG_PATH: optional Node runner path for app-owned GitHub trigger settings.
 - SENTRY_WEBHOOK_SECRET: Sentry webhook signature secret.
 - SENTRY_REPO_MAP: JSON object mapping Sentry project slugs to `{ "repo": "owner/name", "baseBranch": "main" }` route objects. A string value is also accepted and defaults the base branch to main. Use `*` or `_default` for a map fallback.
 - SENTRY_DEFAULT_REPO: legacy fallback target repo for Sentry-triggered factory work when SENTRY_REPO_MAP has no matching route.
@@ -80,6 +81,8 @@ Send Authorization: Bearer <FACTORY_API_TOKEN>. The Worker uses FACTORY_RUNNER_T
 GET /api/jobs lists recent app-owned factory job admission records. GET /api/jobs/{instanceId} returns one record. In production these endpoints proxy to the Node runner ledger through FACTORY_RUNNER_TOKEN and rewrite streamUrl to the Worker event proxy.
 
 GET /api/automations lists app-owned automation state for GitHub and Sentry signal sources. PATCH /api/automations/{source} accepts `{ "enabled": false, "reason": "..." }` or `{ "enabled": true }` for `github` or `sentry`. These routes require Authorization: Bearer <FACTORY_API_TOKEN>. In production, the Worker proxies reads and writes to the Node runner so automation state survives Worker deploys. Paused GitHub and Sentry automations acknowledge webhooks with `skipped=true` and do not dispatch long-running agent work.
+
+GET /api/integrations/github/config returns app-owned GitHub trigger settings. PATCH /api/integrations/github/config accepts `{ "triggerPhrase": "/factory", "botUsername": "signal-factory-bot" }`; send `{ "botUsername": null }` to disable mention-only triggers. These routes require Authorization: Bearer <FACTORY_API_TOKEN>. In production, the Worker proxies reads and writes to the Node runner so trigger changes do not require a Worker deploy. GitHub webhooks use this runtime config before falling back to the env defaults.
 
 GET /api/integrations/sentry/routes returns app-owned Sentry project-to-repository routing. PATCH /api/integrations/sentry/routes accepts `{ "routes": { "project-slug": { "repo": "owner/name", "baseBranch": "main" } }, "defaultRoute": null }`. These routes require Authorization: Bearer <FACTORY_API_TOKEN>. In production, the Worker proxies reads and writes to the Node runner so Sentry routing can be changed without a Worker redeploy. The webhook resolver checks app-owned routes first, then falls back to SENTRY_REPO_MAP and SENTRY_DEFAULT_REPO.
 
@@ -132,6 +135,8 @@ The runner also sets FACTORY_JOB_LEDGER_PATH=/home/daytona/signal-factory-runner
 The runner also sets FACTORY_AUTOMATION_STATE_PATH=/home/daytona/signal-factory-runner-data/automations.json by default. This keeps operator pause/resume state outside the app deploy directory so runner redeploys do not reset automations.
 
 The runner also sets FACTORY_SENTRY_ROUTE_CONFIG_PATH=/home/daytona/signal-factory-runner-data/sentry-routes.json by default. This keeps Sentry project-to-repository routing outside the app deploy directory so runner redeploys do not reset integration settings.
+
+The runner also sets FACTORY_GITHUB_TRIGGER_CONFIG_PATH=/home/daytona/signal-factory-runner-data/github-trigger.json by default. This keeps GitHub trigger phrase and bot mention settings outside the app deploy directory so runner redeploys do not reset integration settings.
 
 Required runner env values:
 

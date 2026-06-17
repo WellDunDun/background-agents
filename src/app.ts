@@ -13,12 +13,14 @@ import {
   FactoryAdmissionError,
   isFactoryAutomationActive,
   readFactoryAutomationList,
+  readFactoryGitHubTriggerConfig,
   readFactorySentryRouteConfig,
   resolveFactorySentryRepositoryRoute,
   readFactoryJobList,
   readFactoryJobRecord,
   readFactoryReadiness,
   updateFactoryAutomationState,
+  updateFactoryGitHubTriggerSettings,
   updateFactorySentryRoutes,
   proxyRunnerAgentEvents,
 } from "./shared/factory-admission.js";
@@ -27,6 +29,11 @@ import {
   parseFactoryAutomationSource,
   updateFactoryAutomation,
 } from "./shared/automations.js";
+import {
+  getFactoryGitHubTriggerConfig,
+  normalizeGitHubTriggerPatch,
+  updateFactoryGitHubTriggerConfig,
+} from "./shared/github-trigger-config.js";
 import {
   getFactorySentryRouteConfig,
   normalizeSentryRoutePatch,
@@ -141,6 +148,36 @@ app.patch("/api/automations/:source", async (c) => {
   return updated instanceof Response ? updated : c.json(updated);
 });
 
+app.get("/api/integrations/github/config", async (c) => {
+  const authError = requireFactoryApiToken(c);
+  if (authError) {
+    return authError;
+  }
+
+  const config = await readFactoryGitHubTriggerConfig(resolveFactoryEnv(c.env)).catch((error: unknown) =>
+    factoryAdmissionErrorResponse(c, error),
+  );
+  return config instanceof Response ? config : c.json(config);
+});
+
+app.patch("/api/integrations/github/config", async (c) => {
+  const authError = requireFactoryApiToken(c);
+  if (authError) {
+    return authError;
+  }
+
+  const payload = await c.req.json().catch(() => null);
+  const parsed = normalizeGitHubTriggerPatch(payload);
+  if (!parsed.ok) {
+    return c.json({ error: parsed.error }, 400);
+  }
+
+  const config = await updateFactoryGitHubTriggerSettings(resolveFactoryEnv(c.env), parsed.value).catch(
+    (error: unknown) => factoryAdmissionErrorResponse(c, error),
+  );
+  return config instanceof Response ? config : c.json(config);
+});
+
 app.get("/api/integrations/sentry/routes", async (c) => {
   const authError = requireFactoryApiToken(c);
   if (authError) {
@@ -233,6 +270,30 @@ app.patch("/api/runner/automations/:source", async (c) => {
   }
 
   return c.json(await updateFactoryAutomation(resolveFactoryEnv(c.env), source, patch.value));
+});
+
+app.get("/api/runner/integrations/github/config", async (c) => {
+  const authError = requireFactoryRunnerToken(c);
+  if (authError) {
+    return authError;
+  }
+
+  return c.json(await getFactoryGitHubTriggerConfig(resolveFactoryEnv(c.env)));
+});
+
+app.patch("/api/runner/integrations/github/config", async (c) => {
+  const authError = requireFactoryRunnerToken(c);
+  if (authError) {
+    return authError;
+  }
+
+  const payload = await c.req.json().catch(() => null);
+  const parsed = normalizeGitHubTriggerPatch(payload);
+  if (!parsed.ok) {
+    return c.json({ error: parsed.error }, 400);
+  }
+
+  return c.json(await updateFactoryGitHubTriggerConfig(resolveFactoryEnv(c.env), parsed.value));
 });
 
 app.get("/api/runner/integrations/sentry/routes", async (c) => {

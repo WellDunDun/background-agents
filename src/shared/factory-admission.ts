@@ -19,6 +19,12 @@ import {
   parseRepositorySlug,
 } from "./github.js";
 import {
+  getFactoryGitHubTriggerConfig,
+  updateFactoryGitHubTriggerConfig,
+  type FactoryGitHubTriggerConfig,
+  type FactoryGitHubTriggerPatch,
+} from "./github-trigger-config.js";
+import {
   getFactorySentryRouteConfig,
   resolveConfiguredSentryRepositoryRoute,
   updateFactorySentryRouteConfig,
@@ -269,6 +275,60 @@ export async function isFactoryAutomationActive(
 
   const list = await readFactoryAutomationList(runtimeEnv);
   return list.automations.find((automation) => automation.source === source)?.enabled ?? true;
+}
+
+export async function readFactoryGitHubTriggerConfig(env: FactoryEnv): Promise<FactoryGitHubTriggerConfig> {
+  const runtimeEnv = resolveFactoryEnv(env);
+  const runnerUrl = normalizeRunnerUrl(runtimeEnv.FACTORY_RUNNER_URL);
+  if (!runnerUrl) {
+    return getFactoryGitHubTriggerConfig(runtimeEnv);
+  }
+
+  const runnerToken = requireRunnerToken(runtimeEnv);
+  const response = await fetch(runnerUrl + "/api/runner/integrations/github/config", {
+    headers: { Authorization: "Bearer " + runnerToken },
+    signal: AbortSignal.timeout(numberFromEnv(runtimeEnv.FACTORY_RUNNER_REQUEST_TIMEOUT_MS) ?? DEFAULT_RUNNER_REQUEST_TIMEOUT_MS),
+  });
+  const body = await parseJsonResponse(response);
+  if (!response.ok) {
+    throw new FactoryAdmissionError(
+      "Factory runner rejected GitHub trigger config request: " + response.status + " " + describeRunnerError(body),
+      response.status >= 500 ? 502 : response.status,
+    );
+  }
+
+  return normalizeRunnerGitHubTriggerConfig(body);
+}
+
+export async function updateFactoryGitHubTriggerSettings(
+  env: FactoryEnv,
+  patch: FactoryGitHubTriggerPatch,
+): Promise<FactoryGitHubTriggerConfig> {
+  const runtimeEnv = resolveFactoryEnv(env);
+  const runnerUrl = normalizeRunnerUrl(runtimeEnv.FACTORY_RUNNER_URL);
+  if (!runnerUrl) {
+    return updateFactoryGitHubTriggerConfig(runtimeEnv, patch);
+  }
+
+  const runnerToken = requireRunnerToken(runtimeEnv);
+  const response = await fetch(runnerUrl + "/api/runner/integrations/github/config", {
+    method: "PATCH",
+    headers: {
+      Authorization: "Bearer " + runnerToken,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(patch),
+    signal: AbortSignal.timeout(numberFromEnv(runtimeEnv.FACTORY_RUNNER_REQUEST_TIMEOUT_MS) ?? DEFAULT_RUNNER_REQUEST_TIMEOUT_MS),
+  });
+  const body = await parseJsonResponse(response);
+  if (!response.ok) {
+    throw new FactoryAdmissionError(
+      "Factory runner rejected GitHub trigger config update: " + response.status + " " + describeRunnerError(body),
+      response.status >= 500 ? 502 : response.status,
+    );
+  }
+
+  return normalizeRunnerGitHubTriggerConfig(body);
 }
 
 export async function readFactorySentryRouteConfig(env: FactoryEnv): Promise<FactorySentryRouteConfig> {
@@ -552,6 +612,18 @@ function normalizeRunnerAutomationState(value: unknown): FactoryAutomationState 
     enabled: value.enabled,
     updatedAt: value.updatedAt,
     ...(typeof value.reason === "string" ? { reason: value.reason } : {}),
+  };
+}
+
+function normalizeRunnerGitHubTriggerConfig(value: unknown): FactoryGitHubTriggerConfig {
+  if (!isRecord(value) || typeof value.triggerPhrase !== "string" || typeof value.updatedAt !== "string") {
+    throw new FactoryAdmissionError("Factory runner returned an invalid GitHub trigger config.");
+  }
+
+  return {
+    triggerPhrase: value.triggerPhrase,
+    updatedAt: value.updatedAt,
+    ...(typeof value.botUsername === "string" ? { botUsername: value.botUsername } : {}),
   };
 }
 

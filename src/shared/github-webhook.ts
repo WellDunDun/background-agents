@@ -2,7 +2,12 @@ import type { Context } from "hono";
 
 import { makeFactoryJobInput, type FactoryJobRequest } from "./factory-types.js";
 import { resolveFactoryEnv, type FactoryEnv } from "./env.js";
-import { admitFactoryJob, isFactoryAutomationActive } from "./factory-admission.js";
+import {
+  admitFactoryJob,
+  isFactoryAutomationActive,
+  readFactoryGitHubTriggerConfig,
+} from "./factory-admission.js";
+import type { FactoryGitHubTriggerConfig } from "./github-trigger-config.js";
 
 const GITHUB_BODY_LIMIT_BYTES = 25 * 1024 * 1024;
 const REGEX_SPECIAL_CHARS = "\\^$.*+?()[]{}|";
@@ -88,6 +93,8 @@ async function handleVerifiedGitHubDelivery(
   env: FactoryEnv,
   delivery: GitHubWebhookDelivery,
 ): Promise<GitHubWebhookResult> {
+  const triggerConfig = await readFactoryGitHubTriggerConfig(env);
+
   if (delivery.name === "issue_comment" && delivery.payload.action === "created") {
     const payload = delivery.payload as IssueCommentPayload;
     const { repository, issue, comment, sender } = payload;
@@ -95,7 +102,7 @@ async function handleVerifiedGitHubDelivery(
       return;
     }
 
-    const command = extractFactoryCommand(comment.body, env);
+    const command = extractFactoryCommand(comment.body, triggerConfig);
     if (!command) {
       return;
     }
@@ -143,7 +150,7 @@ async function handleVerifiedGitHubDelivery(
       return;
     }
 
-    const command = extractFactoryCommand(comment.body, env);
+    const command = extractFactoryCommand(comment.body, triggerConfig);
     if (!command) {
       return;
     }
@@ -196,7 +203,7 @@ async function handleVerifiedGitHubDelivery(
       return;
     }
 
-    const command = extractFactoryCommand(issue.body ?? "", env);
+    const command = extractFactoryCommand(issue.body ?? "", triggerConfig);
     if (!command) {
       return;
     }
@@ -262,9 +269,9 @@ function serializeGitHubWebhookResult(_c: Context, value: GitHubWebhookResult): 
   return Response.json(value);
 }
 
-function extractFactoryCommand(body: string, env: FactoryEnv): string | undefined {
-  const triggerPhrase = (env.FACTORY_GITHUB_TRIGGER_PHRASE || "/factory").trim();
-  const botUsername = env.GITHUB_BOT_USERNAME?.trim();
+function extractFactoryCommand(body: string, config: FactoryGitHubTriggerConfig): string | undefined {
+  const triggerPhrase = config.triggerPhrase;
+  const botUsername = config.botUsername;
 
   const withoutMention = botUsername ? stripMention(body, botUsername) : body;
   const command = extractTriggerPhraseCommand(withoutMention, triggerPhrase);
