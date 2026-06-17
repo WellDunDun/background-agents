@@ -106,10 +106,40 @@ class DaytonaSandboxApi implements SandboxApi {
 export function daytona(sandbox: DaytonaSandbox): SandboxFactory {
   return {
     async createSessionEnv(): Promise<SessionEnv> {
-      const sandboxCwd = (await sandbox.getWorkDir()) ?? (await sandbox.getUserHomeDir()) ?? "/home/daytona";
+      const sandboxCwd = await retryTransientDaytonaOperation(async () => {
+        return (await sandbox.getWorkDir()) ?? (await sandbox.getUserHomeDir()) ?? "/home/daytona";
+      });
       return createSandboxSessionEnv(new DaytonaSandboxApi(sandbox), sandboxCwd);
     },
   };
+}
+
+async function retryTransientDaytonaOperation<T>(operation: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (!isTransientDaytonaError(error) || attempt === 4) {
+        break;
+      }
+      await sleep(1000 * 2 ** attempt);
+    }
+  }
+  throw lastError;
+}
+
+function isTransientDaytonaError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return /ECONNRESET|ETIMEDOUT|ECONNREFUSED|502|503|504/i.test(error.message);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function parseModifiedAt(value: string | undefined): Date | undefined {
@@ -123,4 +153,3 @@ function parseModifiedAt(value: string | undefined): Date | undefined {
 function quotePosix(value: string): string {
   return "'" + value.replace(/'/g, "'\\''") + "'";
 }
-
