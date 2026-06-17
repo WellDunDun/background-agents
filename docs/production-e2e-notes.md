@@ -73,8 +73,21 @@ Proven:
 - Runner workspace mode avoids nested Daytona sandbox proxy failures by using the Daytona runner sandbox as the Flue local workspace boundary.
 - The stream reaches the openai-codex provider; there is no longer a Cloudflare Worker block page.
 
-Current blocker:
+Resolved credential issue:
 
-- The copied Codex OAuth refresh token is invalid with refresh_token_reused. A fresh ChatGPT/Codex sign-in is required once, then the runner can be redeployed. The code now persists rotated Codex credentials to .runner.env through FACTORY_CODEX_CREDENTIALS_PATH, so a valid refresh token should not be reused after the next successful refresh.
+- The runner now uses an unexpired Codex access token first and refreshes only when the access token is missing or near expiry. This avoids consuming one-time Codex refresh tokens unnecessarily.
+- Run `npm run auth:sync-codex` after `codex login` to copy the local Codex CLI OAuth token pair into the ignored `.dev.vars` file without printing token values.
+- The runner still persists rotated Codex credentials to `.runner.env` through `FACTORY_CODEX_CREDENTIALS_PATH` after a successful refresh.
 
-Sentry is not fully actionable until `SENTRY_DEFAULT_REPO` or a per-project routing table is configured.
+Latest production smoke:
+
+- `npm run auth:sync-codex` succeeded from `~/.codex/auth.json`.
+- `npm run verify` succeeded.
+- `npm run runner:deploy:daytona -- --configure-worker` succeeded and refreshed `FACTORY_RUNNER_URL` / `FACTORY_RUNNER_TOKEN` on the Worker.
+- A no-repository `POST /api/jobs` returned 202 with `executionTarget=runner`.
+- `GET /api/jobs/{instanceId}/events?offset=-1&live=sse` returned a live Flue event stream with `operation_start`, `agent_start`, `turn_start`, `text_delta`, `turn_messages`, `turn`, and `agent_end`.
+- The stream reached `openai-codex/gpt-5.5`, produced the expected smoke-test text, and had no Codex provider/auth/Cloudflare block error.
+
+Remaining product setup:
+
+- Sentry is not fully actionable until `SENTRY_DEFAULT_REPO` or a per-project routing table is configured.
