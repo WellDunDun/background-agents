@@ -68,6 +68,10 @@ app.get("/api/config/status", (c) => {
     manualApi: {
       configured: Boolean(c.env.FACTORY_API_TOKEN),
     },
+    codex: {
+      accessTokenConfigured: Boolean(c.env.OPENAI_CODEX_ACCESS_TOKEN),
+      refreshTokenConfigured: Boolean(c.env.OPENAI_CODEX_REFRESH_TOKEN),
+    },
     daytona: {
       configured: Boolean(c.env.DAYTONA_API_KEY),
       target: c.env.DAYTONA_TARGET || null,

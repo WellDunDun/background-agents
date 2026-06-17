@@ -3,6 +3,7 @@ import { createAgent, type AgentRouteHandler } from "@flue/runtime";
 import implementSkill from "../skills/implement/SKILL.md" with { type: "skill" };
 import { createFactoryDaytonaWorkspace } from "../shared/daytona.js";
 import { resolveFactoryModel, type FactoryEnv } from "../shared/env.js";
+import { registerFactoryModelProvider } from "../shared/model-provider.js";
 import { createGitHubFactoryTools } from "../tools/github-factory-tools.js";
 
 export const description =
@@ -11,6 +12,7 @@ export const description =
 export const route: AgentRouteHandler = async (_c, next) => next();
 
 export default createAgent<unknown, FactoryEnv>(async ({ id, env }) => {
+  await registerFactoryModelProvider(env);
   const workspace = await createFactoryDaytonaWorkspace(env, id);
 
   return {

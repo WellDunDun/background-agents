@@ -32,7 +32,7 @@ Flue builds the deployable Cloudflare Worker into dist/flue_factory. The deploy 
 Set these as local .dev.vars values for development and as Cloudflare Worker secrets for production:
 
 - FACTORY_API_TOKEN: bearer token required for manual API and config-status routes.
-- OPENAI_API_KEY: provider key for the configured Codex/OpenAI model.
+- OPENAI_CODEX_ACCESS_TOKEN or OPENAI_CODEX_REFRESH_TOKEN: ChatGPT/Codex subscription credential for openai-codex models. OPENAI_API_KEY is only for direct openai/* models.
 - DAYTONA_API_KEY: Daytona workspace provider key.
 - GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, GITHUB_APP_INSTALLATION_ID: GitHub App credentials for repository access and PR creation.
 - GITHUB_WEBHOOK_SECRET: GitHub webhook secret for verified inbound signal delivery.

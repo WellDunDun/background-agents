@@ -2,6 +2,8 @@ export interface FactoryEnv {
   FACTORY_API_TOKEN?: string;
   FACTORY_DEFAULT_MODEL?: string;
   OPENAI_API_KEY?: string;
+  OPENAI_CODEX_ACCESS_TOKEN?: string;
+  OPENAI_CODEX_REFRESH_TOKEN?: string;
   DAYTONA_API_KEY?: string;
   DAYTONA_API_URL?: string;
   DAYTONA_TARGET?: string;

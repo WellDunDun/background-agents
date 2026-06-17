@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@daytona/sdk": "0.187.0",
+    "@earendil-works/pi-ai": "0.79.6",
     "@flue/github": "1.0.0-beta.1",
     "@flue/runtime": "1.0.0-beta.1",
     "agents": "^0.14.1",
