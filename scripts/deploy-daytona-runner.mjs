@@ -38,6 +38,8 @@ const OPTIONAL_RUNNER_ENV_KEYS = [
   "DAYTONA_AUTO_DELETE_MINUTES",
   "FACTORY_GIT_AUTHOR_NAME",
   "FACTORY_GIT_AUTHOR_EMAIL",
+  "FACTORY_WORKSPACE_PROVIDER",
+  "FACTORY_RUNNER_WORKSPACE_ROOT",
 ];
 
 main().catch((error) => {
@@ -189,6 +191,8 @@ function buildRunnerEnv(env) {
 
   const runnerEnv = {
     FACTORY_DEFAULT_MODEL: model,
+    FACTORY_WORKSPACE_PROVIDER: "runner",
+    FACTORY_RUNNER_WORKSPACE_ROOT: env.FACTORY_RUNNER_WORKSPACE_ROOT || "/tmp/signal-factory-jobs",
   };
 
   for (const key of [...REQUIRED_RUNNER_ENV_KEYS, ...OPTIONAL_RUNNER_ENV_KEYS]) {

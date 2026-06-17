@@ -104,6 +104,8 @@ The deploy script packages the committed source with git archive, uploads it to 
 
 The runner script creates a Daytona sandbox from `node:22-bookworm` with 2 vCPU, 4 GiB RAM, and 10 GiB disk by default. Override this with FACTORY_RUNNER_IMAGE, FACTORY_RUNNER_CPU, FACTORY_RUNNER_MEMORY_GIB, and FACTORY_RUNNER_DISK_GIB in the local deploy environment if your Daytona quota requires different limits. If an existing runner sandbox is undersized, the script recreates it.
 
+By default the deployed Daytona runner sets FACTORY_WORKSPACE_PROVIDER=runner. That means the runner sandbox itself is the Flue local workspace boundary for jobs, with per-job directories under /tmp/signal-factory-jobs. This avoids a nested Daytona runner creating a second Daytona sandbox and then failing on provider proxy resets. For a non-Daytona Node host, unset FACTORY_WORKSPACE_PROVIDER to return to per-job Daytona workspaces.
+
 Required runner env values:
 
 - FACTORY_RUNNER_TOKEN: shared secret for Worker-to-runner admission and stream reads.

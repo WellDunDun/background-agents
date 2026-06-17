@@ -1,9 +1,9 @@
 import { defineTool } from "@flue/runtime";
-import type { Sandbox as DaytonaSandbox } from "@daytona/sdk";
 import { Buffer } from "node:buffer";
 import * as v from "valibot";
 
 import type { FactoryEnv } from "../shared/env.js";
+import type { FactoryCommandSandbox } from "../shared/daytona.js";
 import {
   commentOnIssue,
   createPullRequest,
@@ -16,7 +16,7 @@ import {
 
 export function createGitHubFactoryTools(
   env: FactoryEnv,
-  sandbox: DaytonaSandbox,
+  sandbox: FactoryCommandSandbox,
   context: { jobId: string },
 ) {
   return [
@@ -168,7 +168,7 @@ export function createGitHubFactoryTools(
 }
 
 async function configureGitCredentials(
-  sandbox: DaytonaSandbox,
+  sandbox: FactoryCommandSandbox,
   homeDir: string,
   token: string,
   env: FactoryEnv,
@@ -193,7 +193,7 @@ async function configureGitCredentials(
 }
 
 async function runCommand(
-  sandbox: DaytonaSandbox,
+  sandbox: FactoryCommandSandbox,
   command: string,
   cwd: string,
   timeoutSeconds: number,
