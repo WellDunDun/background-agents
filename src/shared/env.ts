@@ -20,6 +20,9 @@ export interface FactoryEnv {
   GITHUB_BOT_USERNAME?: string;
   FACTORY_GITHUB_TRIGGER_PHRASE?: string;
   SENTRY_WEBHOOK_SECRET?: string;
+  SENTRY_DEFAULT_REPO?: string;
+  SENTRY_DEFAULT_BASE_BRANCH?: string;
+  SENTRY_ACCEPT_LEVELS?: string;
 }
 
 export const DEFAULT_FACTORY_MODEL = "openai-codex/gpt-5.5";

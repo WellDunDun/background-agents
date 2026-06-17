@@ -36,6 +36,7 @@ Set these as local .dev.vars values for development and as Cloudflare Worker sec
 - DAYTONA_API_KEY: Daytona workspace provider key.
 - GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, GITHUB_APP_INSTALLATION_ID: GitHub App credentials for repository access and PR creation.
 - GITHUB_WEBHOOK_SECRET: GitHub webhook secret for verified inbound signal delivery.
+- SENTRY_WEBHOOK_SECRET and SENTRY_DEFAULT_REPO: Sentry webhook signature secret and target repo for Sentry-triggered factory work.
 
 Optional GitHub trigger settings:
 
@@ -67,3 +68,11 @@ https://<worker-host>/channels/github/webhook
 Configure the GitHub App webhook with application/json content and the same GITHUB_WEBHOOK_SECRET. Subscribe initially to Issues, Issue comments, and Pull request review comments.
 
 The factory only admits GitHub signals that contain FACTORY_GITHUB_TRIGGER_PHRASE or mention GITHUB_BOT_USERNAME. This keeps ordinary issue traffic from starting autonomous work.
+
+## Sentry Webhook
+
+The Sentry webhook route is mounted at:
+
+https://<worker-host>/webhooks/sentry
+
+Configure Sentry to send issue alert or critical metric alert webhooks with the same SENTRY_WEBHOOK_SECRET. Sentry payloads are signed with the sentry-hook-signature HMAC header. The factory routes accepted Sentry signals to SENTRY_DEFAULT_REPO and SENTRY_DEFAULT_BASE_BRANCH, and admits only levels in SENTRY_ACCEPT_LEVELS.
