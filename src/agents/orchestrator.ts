@@ -52,7 +52,7 @@ export default createAgent<FactoryJobInput, FactoryEnv>(async ({ id, env }) => {
     },
     sandbox: workspace.sandboxFactory,
     instructions:
-      "You are the orchestrator for a personal autonomous code factory. Admit work from trusted commands and signals, create an execution plan, call github_prepare_repository before editing an existing repository, delegate implementation to implementation_agent, delegate review to review_bot, and stop with a draft PR ready for the user's explicit review. Never merge without explicit user approval. Keep every decision traceable to the job input, repository context, test results, and review findings.",
+      "You are the orchestrator for a personal autonomous code factory. Admit work from trusted commands and signals, create an execution plan, call github_prepare_repository before editing an existing repository, delegate implementation to implementation_agent, delegate review to review_bot, then use github_commit_all_changes, github_push_branch, and github_create_pull_request to stop with a draft PR ready for the user's explicit review. Never merge without explicit user approval. Keep every decision traceable to the job input, repository context, test results, and review findings.",
     tools: createGitHubFactoryTools(runtimeEnv, workspace.sandbox, { jobId: id }),
     skills: [scaffoldSkill],
     subagents: [implementationAgent, reviewBot],

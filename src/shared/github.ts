@@ -36,6 +36,7 @@ export interface PullRequestResult {
   draft: boolean;
   sourceBranch: string;
   targetBranch: string;
+  existing?: boolean;
 }
 
 interface CachedInstallationToken {
@@ -195,6 +196,11 @@ export async function createPullRequest(
   },
 ): Promise<PullRequestResult> {
   const token = await getCachedInstallationToken(config);
+  const existing = await findOpenPullRequestForBranch(config, input);
+  if (existing) {
+    return existing;
+  }
+
   const response = await githubFetch(GITHUB_API_BASE + "/repos/" + input.owner + "/" + input.repo + "/pulls", token, {
     method: "POST",
     body: JSON.stringify({
@@ -207,10 +213,50 @@ export async function createPullRequest(
   });
 
   if (!response.ok) {
+    if (response.status === 422) {
+      const existingAfterConflict = await findOpenPullRequestForBranch(config, input);
+      if (existingAfterConflict) {
+        return existingAfterConflict;
+      }
+    }
     throw new Error("Failed to create pull request: " + response.status + " " + (await response.text()));
   }
 
-  const data = (await response.json()) as {
+  return pullRequestResultFromGitHub(await response.json(), false);
+}
+
+export async function findOpenPullRequestForBranch(
+  config: GitHubAppConfig,
+  input: {
+    owner: string;
+    repo: string;
+    sourceBranch: string;
+    targetBranch: string;
+  },
+): Promise<PullRequestResult | null> {
+  const token = await getCachedInstallationToken(config);
+  const params = new URLSearchParams({
+    state: "open",
+    head: input.owner + ":" + input.sourceBranch,
+    base: input.targetBranch,
+    per_page: "1",
+  });
+  const response = await githubFetch(
+    GITHUB_API_BASE + "/repos/" + input.owner + "/" + input.repo + "/pulls?" + params,
+    token,
+  );
+
+  if (!response.ok) {
+    throw new Error("Failed to search pull requests: " + response.status + " " + (await response.text()));
+  }
+
+  const data = (await response.json()) as unknown[];
+  const [pullRequest] = data;
+  return pullRequest ? pullRequestResultFromGitHub(pullRequest, true) : null;
+}
+
+function pullRequestResultFromGitHub(value: unknown, existing: boolean): PullRequestResult {
+  const data = value as {
     number: number;
     html_url: string;
     url: string;
@@ -228,6 +274,7 @@ export async function createPullRequest(
     draft: data.draft,
     sourceBranch: data.head.ref,
     targetBranch: data.base.ref,
+    ...(existing ? { existing: true } : {}),
   };
 }
 

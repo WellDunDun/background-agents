@@ -121,8 +121,78 @@ export function createGitHubFactoryTools(
       },
     }),
     defineTool({
+      name: "github_get_repository_status",
+      description: "Read the current branch, latest commit, and short git status for a prepared checkout.",
+      parameters: v.object({
+        checkoutDir: v.string(),
+      }),
+      execute: async ({ checkoutDir }) => {
+        const result = await runCommand(
+          sandbox,
+          [
+            "cd " + quotePosix(checkoutDir),
+            "printf 'branch=' && git branch --show-current",
+            "printf 'head=' && git rev-parse HEAD",
+            "printf 'status\\n' && git status --porcelain=v1",
+          ].join(" && "),
+          checkoutDir,
+          120,
+        );
+        return JSON.stringify(result);
+      },
+    }),
+    defineTool({
+      name: "github_commit_all_changes",
+      description:
+        "Stage every changed file in a prepared checkout and create one commit. Returns committed=false when the worktree is clean.",
+      parameters: v.object({
+        checkoutDir: v.string(),
+        message: v.pipe(v.string(), v.description("Single concise git commit message.")),
+      }),
+      execute: async ({ checkoutDir, message }) => {
+        const statusBefore = await runCommand(
+          sandbox,
+          "cd " + quotePosix(checkoutDir) + " && git status --porcelain=v1",
+          checkoutDir,
+          120,
+        );
+        if (!statusBefore.stdout.trim()) {
+          return JSON.stringify({ committed: false, reason: "worktree_clean", status: "" });
+        }
+
+        const commitMessage = normalizeCommitMessage(message);
+        const result = await runCommand(
+          sandbox,
+          [
+            "set -e",
+            "cd " + quotePosix(checkoutDir),
+            "git add -A",
+            "if git diff --cached --quiet; then echo '__NO_COMMIT__'; else git commit -m " +
+              quotePosix(commitMessage) +
+              " && git rev-parse HEAD; fi",
+            "printf 'status_after\\n'",
+            "git status --porcelain=v1",
+          ].join(" && "),
+          checkoutDir,
+          600,
+        );
+        if (result.stdout.includes("__NO_COMMIT__")) {
+          return JSON.stringify({ committed: false, reason: "no_staged_changes", status: statusBefore.stdout });
+        }
+
+        return JSON.stringify({
+          committed: true,
+          commit: result.stdout.match(/\b[0-9a-f]{40}\b/)?.[0],
+          message: commitMessage,
+          statusBefore: statusBefore.stdout,
+          statusAfter: result.stdout.split("status_after", 2)[1]?.trim() ?? "",
+          stdout: result.stdout,
+        });
+      },
+    }),
+    defineTool({
       name: "github_create_pull_request",
-      description: "Create a draft pull request for a pushed factory branch.",
+      description: "Create or return the existing open draft pull request for a pushed factory branch.",
       parameters: v.object({
         repo: v.string(),
         title: v.string(),
@@ -217,6 +287,14 @@ function sanitizeBranchName(value: string): string {
     throw new Error("Invalid branch name.");
   }
   return normalized.slice(0, 180);
+}
+
+function normalizeCommitMessage(value: string): string {
+  const subject = value
+    .replace(/\0/g, "")
+    .split(/\r?\n/, 1)[0]
+    ?.trim();
+  return subject ? subject.slice(0, 120) : "chore: apply factory changes";
 }
 
 function quotePosix(value: string): string {
