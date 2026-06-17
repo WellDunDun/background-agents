@@ -5,6 +5,7 @@ import { registerApiProvider, registerProvider } from "@flue/runtime";
 import { resolveFactoryEnv, resolveFactoryModel, type FactoryEnv } from "./env.js";
 
 const OPENAI_CODEX_SSE_API = "openai-codex-responses-sse";
+const ACCESS_TOKEN_REFRESH_WINDOW_MS = 10 * 60 * 1000;
 let openAICodexSseApiRegistered = false;
 
 export async function registerFactoryModelProvider(env: FactoryEnv): Promise<void> {
@@ -27,6 +28,11 @@ export async function registerFactoryModelProvider(env: FactoryEnv): Promise<voi
 }
 
 async function resolveOpenAICodexAccessToken(env: FactoryEnv): Promise<string | undefined> {
+  const accessToken = env.OPENAI_CODEX_ACCESS_TOKEN?.trim();
+  if (accessToken && isUsableJwtAccessToken(accessToken)) {
+    return accessToken;
+  }
+
   const refreshToken = env.OPENAI_CODEX_REFRESH_TOKEN?.trim();
   if (refreshToken) {
     const refreshed = await refreshOpenAICodexToken(refreshToken);
@@ -34,8 +40,33 @@ async function resolveOpenAICodexAccessToken(env: FactoryEnv): Promise<string | 
     return refreshed.access;
   }
 
-  const accessToken = env.OPENAI_CODEX_ACCESS_TOKEN?.trim();
   return accessToken || undefined;
+}
+
+function isUsableJwtAccessToken(token: string): boolean {
+  const expiresAtMs = jwtExpiresAtMs(token);
+  return expiresAtMs !== undefined && expiresAtMs - Date.now() > ACCESS_TOKEN_REFRESH_WINDOW_MS;
+}
+
+function jwtExpiresAtMs(token: string): number | undefined {
+  const [, encodedPayload] = token.split(".");
+  if (!encodedPayload) {
+    return undefined;
+  }
+
+  try {
+    const json = decodeBase64Url(encodedPayload);
+    const payload = JSON.parse(json) as { exp?: unknown };
+    return typeof payload.exp === "number" ? payload.exp * 1000 : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function decodeBase64Url(value: string): string {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+  return atob(padded);
 }
 
 async function persistOpenAICodexCredentials(
