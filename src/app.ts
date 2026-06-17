@@ -1,4 +1,4 @@
-import { dispatch, observe } from "@flue/runtime";
+import { dispatch } from "@flue/runtime";
 import { flue } from "@flue/runtime/routing";
 import { Hono } from "hono";
 
@@ -10,12 +10,6 @@ import {
 import type { FactoryEnv } from "./shared/env.js";
 
 const app = new Hono<{ Bindings: FactoryEnv }>();
-
-observe((event) => {
-  if (event.type === "error") {
-    console.error("flue_error", event);
-  }
-});
 
 app.get("/health", (c) => {
   return c.json({ ok: true, service: "flue-factory" });
@@ -52,4 +46,3 @@ app.post("/api/jobs", async (c) => {
 app.route("/", flue());
 
 export default app;
-

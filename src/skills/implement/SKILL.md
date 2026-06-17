@@ -1,3 +1,8 @@
+---
+name: implement
+description: Build scoped code changes for a software factory job.
+---
+
 # Implementation Agent Skill
 
 Use this skill when a factory job requires code changes.
@@ -11,4 +16,3 @@ Use this skill when a factory job requires code changes.
 7. Produce a concise handoff with changed files, test results, and remaining risks.
 
 Never merge. The factory may create a PR or checkpoint commit, but the user must approve the merge.
-

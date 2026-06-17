@@ -8,6 +8,8 @@ This branch intentionally starts clean instead of retrofitting the old backgroun
 
 - Cloudflare Worker entrypoint with a manual job API.
 - Durable Flue agents for orchestration, implementation, and review.
+- Daytona-backed workspaces for repo execution.
+- GitHub App tools for repo access, checkout, branch push, PR creation, and PR comments.
 - A finite kickoff workflow for Studio/CLI smoke tests.
 - Project skills for implementation, review, and scaffolding work.
 - Cloudflare migrations for Flue-generated Durable Objects.
@@ -23,7 +25,7 @@ This branch intentionally starts clean instead of retrofitting the old backgroun
 
 Cloudflare development uses .dev.vars; production secrets should be set through Wrangler secrets or the deployment platform, not committed files.
 
-Flue currently generates the Cloudflare Worker entry and merged Wrangler config in .flue-vite and .flue-vite.wrangler.jsonc during build. The deploy scripts run flue build first, then pass that generated config to Wrangler.
+Flue builds the deployable Cloudflare Worker into dist/flue_factory. The deploy scripts run flue build first, then pass the generated Wrangler config in that output directory to Wrangler.
 
 ## API
 

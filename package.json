@@ -6,12 +6,13 @@
   "scripts": {
     "build": "flue build --target cloudflare",
     "dev": "flue dev --target cloudflare",
-    "deploy": "npm run build && wrangler deploy --config .flue-vite.wrangler.jsonc",
-    "deploy:dry-run": "npm run build && wrangler deploy --dry-run --config .flue-vite.wrangler.jsonc",
+    "deploy": "npm run build && wrangler deploy --config dist/flue_factory/wrangler.json",
+    "deploy:dry-run": "npm run build && wrangler deploy --dry-run --config dist/flue_factory/wrangler.json",
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm run build"
   },
   "dependencies": {
+    "@daytona/sdk": "0.187.0",
     "@flue/runtime": "1.0.0-beta.1",
     "agents": "^0.14.1",
     "hono": "4.12.23",

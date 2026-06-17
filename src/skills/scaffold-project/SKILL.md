@@ -1,3 +1,8 @@
+---
+name: scaffold-project
+description: Scaffold a new project from a software factory idea prompt.
+---
+
 # Scaffold Project Skill
 
 Use this skill when the factory creates a new repository or project from an idea.
@@ -9,4 +14,3 @@ Use this skill when the factory creates a new repository or project from an idea
 5. Run the first build or smoke test before creating a checkpoint.
 
 Prefer a working vertical slice over a broad skeleton.
-

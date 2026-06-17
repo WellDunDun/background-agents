@@ -1,3 +1,8 @@
+---
+name: review
+description: Review software factory changes for correctness, security, tests, and readiness.
+---
+
 # Review Bot Skill
 
 Use this skill when reviewing a factory implementation.
@@ -11,4 +16,3 @@ Review in this order:
 5. Code clarity, domain boundaries, and maintainability.
 
 Findings must be concrete, actionable, and tied to files or commands. If the work is not ready, request another implementation iteration. If it is ready, say it is ready for human review, not merge.
-
