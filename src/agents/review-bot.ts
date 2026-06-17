@@ -1,7 +1,7 @@
 import { createAgent, type AgentRouteHandler } from "@flue/runtime";
 
 import reviewSkill from "../skills/thermo-nuclear-code-quality-review/SKILL.md" with { type: "skill" };
-import { resolveFactoryModel, type FactoryEnv } from "../shared/env.js";
+import { resolveFactoryEnv, resolveFactoryModel, type FactoryEnv } from "../shared/env.js";
 
 export const description =
   "Reviews implementation branches before they are sent to the user.";
@@ -9,7 +9,7 @@ export const description =
 export const route: AgentRouteHandler = async (_c, next) => next();
 
 export default createAgent<unknown, FactoryEnv>(({ env }) => ({
-  model: resolveFactoryModel(env),
+  model: resolveFactoryModel(resolveFactoryEnv(env)),
   thinkingLevel: "high",
   durability: {
     maxAttempts: 6,

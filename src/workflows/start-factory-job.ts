@@ -1,10 +1,6 @@
-import {
-  dispatch,
-  type FlueContext,
-  type WorkflowRouteHandler,
-} from "@flue/runtime";
+import { type FlueContext, type WorkflowRouteHandler } from "@flue/runtime";
 
-import orchestrator from "../agents/orchestrator.js";
+import { admitFactoryJob } from "../shared/factory-admission.js";
 import {
   makeFactoryJobInput,
   parseFactoryJobRequest,
@@ -15,6 +11,7 @@ import type { FactoryEnv } from "../shared/env.js";
 export const route: WorkflowRouteHandler = async (_c, next) => next();
 
 export async function run({
+  env,
   payload,
 }: FlueContext<FactoryJobRequest, FactoryEnv>) {
   const parsed = parseFactoryJobRequest(payload);
@@ -24,17 +21,5 @@ export async function run({
 
   const jobId = crypto.randomUUID();
   const input = makeFactoryJobInput(jobId, parsed.value);
-  const receipt = await dispatch(orchestrator, {
-    id: jobId,
-    input,
-  });
-
-  return {
-    jobId,
-    agent: "orchestrator",
-    instanceId: jobId,
-    dispatchId: receipt.dispatchId,
-    acceptedAt: receipt.acceptedAt,
-  };
+  return admitFactoryJob(env, input);
 }
-

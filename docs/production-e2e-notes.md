@@ -48,4 +48,15 @@ The alternative is to use an official OpenAI API key or Cloudflare AI Gateway-co
   - read job status/events from the Worker
   - link directly to runner logs or Flue/agent stream coordinates
 
+## Implemented Runner Boundary
+
+The codebase now supports this split:
+
+- Set FACTORY_RUNNER_URL and FACTORY_RUNNER_TOKEN on the Worker to forward admitted jobs to a Node runner.
+- Start the Node runner from the same source with npm run build:node and npm run start:node.
+- Leave FACTORY_RUNNER_URL unset on the runner so /api/runner/jobs dispatches the Flue orchestrator locally.
+- Read runner-backed job streams through the Worker at /api/jobs/{instanceId}/events.
+
+The next production proof requires hosting the Node runner, setting FACTORY_RUNNER_URL on the Worker, then rerunning the no-repo smoke job. A passing run should show model output instead of a chatgpt.com Cloudflare block page.
+
 Sentry is not fully actionable until `SENTRY_DEFAULT_REPO` or a per-project routing table is configured.

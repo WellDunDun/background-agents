@@ -1,9 +1,8 @@
-import { dispatch } from "@flue/runtime";
 import type { Context } from "hono";
 
-import orchestrator from "../agents/orchestrator.js";
 import { makeFactoryJobInput, type FactoryJobRequest } from "./factory-types.js";
-import type { FactoryEnv } from "./env.js";
+import { resolveFactoryEnv, type FactoryEnv } from "./env.js";
+import { admitFactoryJob } from "./factory-admission.js";
 
 const GITHUB_BODY_LIMIT_BYTES = 25 * 1024 * 1024;
 const REGEX_SPECIAL_CHARS = "\\^$.*+?()[]{}|";
@@ -25,7 +24,8 @@ interface GitHubWebhookDelivery {
 type GitHubWebhookResult = undefined | JsonValue | Response;
 
 export async function handleGitHubWebhook(c: Context<{ Bindings: FactoryEnv }>): Promise<Response> {
-  if (!c.env.GITHUB_WEBHOOK_SECRET) {
+  const env = resolveFactoryEnv(c.env);
+  if (!env.GITHUB_WEBHOOK_SECRET) {
     return c.json({ error: "GITHUB_WEBHOOK_SECRET is not configured." }, 503);
   }
 
@@ -51,7 +51,7 @@ export async function handleGitHubWebhook(c: Context<{ Bindings: FactoryEnv }>):
 
   const signature = parseGitHubSignature(request.headers.get("x-hub-signature-256"));
   const verified = signature
-    ? await verifyGitHubSignature(c.env.GITHUB_WEBHOOK_SECRET, body, signature)
+    ? await verifyGitHubSignature(env.GITHUB_WEBHOOK_SECRET, body, signature)
     : false;
   if (!verified) {
     return new Response(null, { status: 401 });
@@ -80,11 +80,12 @@ export async function handleGitHubWebhook(c: Context<{ Bindings: FactoryEnv }>):
     installationTarget: readInstallationTarget(request.headers),
   };
 
-  return serializeGitHubWebhookResult(c, await handleVerifiedGitHubDelivery(c, delivery));
+  return serializeGitHubWebhookResult(c, await handleVerifiedGitHubDelivery(c, env, delivery));
 }
 
 async function handleVerifiedGitHubDelivery(
   c: Context<{ Bindings: FactoryEnv }>,
+  env: FactoryEnv,
   delivery: GitHubWebhookDelivery,
 ): Promise<GitHubWebhookResult> {
   if (delivery.name === "issue_comment" && delivery.payload.action === "created") {
@@ -94,7 +95,7 @@ async function handleVerifiedGitHubDelivery(
       return;
     }
 
-    const command = extractFactoryCommand(comment.body, c.env);
+    const command = extractFactoryCommand(comment.body, env);
     if (!command) {
       return;
     }
@@ -132,12 +133,7 @@ async function handleVerifiedGitHubDelivery(
       },
     };
 
-    const receipt = await dispatch(orchestrator, {
-      id: target,
-      input: makeFactoryJobInput(target, request),
-    });
-
-    return acceptedGitHubDispatch(target, receipt.dispatchId);
+    return admitGitHubFactoryJob(env, target, request);
   }
 
   if (delivery.name === "pull_request_review_comment" && delivery.payload.action === "created") {
@@ -147,7 +143,7 @@ async function handleVerifiedGitHubDelivery(
       return;
     }
 
-    const command = extractFactoryCommand(comment.body, c.env);
+    const command = extractFactoryCommand(comment.body, env);
     if (!command) {
       return;
     }
@@ -190,12 +186,7 @@ async function handleVerifiedGitHubDelivery(
       },
     };
 
-    const receipt = await dispatch(orchestrator, {
-      id: target,
-      input: makeFactoryJobInput(target, request),
-    });
-
-    return acceptedGitHubDispatch(target, receipt.dispatchId);
+    return admitGitHubFactoryJob(env, target, request);
   }
 
   if (delivery.name === "issues" && delivery.payload.action === "opened") {
@@ -205,7 +196,7 @@ async function handleVerifiedGitHubDelivery(
       return;
     }
 
-    const command = extractFactoryCommand(issue.body ?? "", c.env);
+    const command = extractFactoryCommand(issue.body ?? "", env);
     if (!command) {
       return;
     }
@@ -241,23 +232,19 @@ async function handleVerifiedGitHubDelivery(
       },
     };
 
-    const receipt = await dispatch(orchestrator, {
-      id: target,
-      input: makeFactoryJobInput(target, request),
-    });
-
-    return acceptedGitHubDispatch(target, receipt.dispatchId);
+    return admitGitHubFactoryJob(env, target, request);
   }
 }
 
-function acceptedGitHubDispatch(instanceId: string, dispatchId: string): JsonValue {
+async function admitGitHubFactoryJob(
+  env: FactoryEnv,
+  instanceId: string,
+  request: FactoryJobRequest,
+): Promise<JsonValue> {
+  const admission = await admitFactoryJob(env, makeFactoryJobInput(instanceId, request));
   return {
-    ok: true,
+    ...admission,
     accepted: true,
-    agent: "orchestrator",
-    instanceId,
-    dispatchId,
-    streamUrl: "/agents/orchestrator/" + encodeURIComponent(instanceId),
   };
 }
 

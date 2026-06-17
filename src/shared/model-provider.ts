@@ -2,18 +2,19 @@ import { refreshOpenAICodexToken } from "@earendil-works/pi-ai/oauth";
 import { streamOpenAICodexResponses } from "@earendil-works/pi-ai/openai-codex-responses";
 import { registerApiProvider, registerProvider } from "@flue/runtime";
 
-import { resolveFactoryModel, type FactoryEnv } from "./env.js";
+import { resolveFactoryEnv, resolveFactoryModel, type FactoryEnv } from "./env.js";
 
 const OPENAI_CODEX_SSE_API = "openai-codex-responses-sse";
 let openAICodexSseApiRegistered = false;
 
 export async function registerFactoryModelProvider(env: FactoryEnv): Promise<void> {
-  const model = resolveFactoryModel(env);
+  const runtimeEnv = resolveFactoryEnv(env);
+  const model = resolveFactoryModel(runtimeEnv);
   if (!model.startsWith("openai-codex/")) {
     return;
   }
 
-  const apiKey = await resolveOpenAICodexAccessToken(env);
+  const apiKey = await resolveOpenAICodexAccessToken(runtimeEnv);
   if (!apiKey) {
     return;
   }

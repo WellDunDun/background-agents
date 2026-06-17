@@ -9,7 +9,7 @@ import reviewSkill from "../skills/thermo-nuclear-code-quality-review/SKILL.md" 
 import scaffoldSkill from "../skills/scaffold-project/SKILL.md" with { type: "skill" };
 import type { FactoryJobInput } from "../shared/factory-types.js";
 import { createFactoryDaytonaWorkspace } from "../shared/daytona.js";
-import { resolveFactoryModel, type FactoryEnv } from "../shared/env.js";
+import { resolveFactoryEnv, resolveFactoryModel, type FactoryEnv } from "../shared/env.js";
 import { registerFactoryModelProvider } from "../shared/model-provider.js";
 import { createGitHubFactoryTools } from "../tools/github-factory-tools.js";
 
@@ -35,11 +35,12 @@ const reviewBot = defineAgentProfile({
 });
 
 export default createAgent<FactoryJobInput, FactoryEnv>(async ({ id, env }) => {
-  await registerFactoryModelProvider(env);
-  const workspace = await createFactoryDaytonaWorkspace(env, id);
+  const runtimeEnv = resolveFactoryEnv(env);
+  await registerFactoryModelProvider(runtimeEnv);
+  const workspace = await createFactoryDaytonaWorkspace(runtimeEnv, id);
 
   return {
-    model: resolveFactoryModel(env),
+    model: resolveFactoryModel(runtimeEnv),
     thinkingLevel: "high",
     durability: {
       maxAttempts: 10,
@@ -52,7 +53,7 @@ export default createAgent<FactoryJobInput, FactoryEnv>(async ({ id, env }) => {
     sandbox: workspace.sandboxFactory,
     instructions:
       "You are the orchestrator for a personal autonomous code factory. Admit work from trusted commands and signals, create an execution plan, call github_prepare_repository before editing an existing repository, delegate implementation to implementation_agent, delegate review to review_bot, and stop with a draft PR ready for the user's explicit review. Never merge without explicit user approval. Keep every decision traceable to the job input, repository context, test results, and review findings.",
-    tools: createGitHubFactoryTools(env, workspace.sandbox, { jobId: id }),
+    tools: createGitHubFactoryTools(runtimeEnv, workspace.sandbox, { jobId: id }),
     skills: [scaffoldSkill],
     subagents: [implementationAgent, reviewBot],
   };

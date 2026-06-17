@@ -55,6 +55,41 @@ export function parseFactoryJobRequest(value: unknown): ParseResult<FactoryJobRe
   };
 }
 
+export function parseFactoryJobInput(value: unknown): ParseResult<FactoryJobInput> {
+  if (!isRecord(value)) {
+    return { ok: false, error: "Expected a JSON object." };
+  }
+
+  if (value.type !== "factory.job.requested") {
+    return { ok: false, error: "type must be factory.job.requested." };
+  }
+
+  const jobId = optionalString(value.jobId);
+  if (!jobId) {
+    return { ok: false, error: "jobId is required." };
+  }
+
+  const receivedAt = optionalString(value.receivedAt);
+  if (!receivedAt || Number.isNaN(Date.parse(receivedAt))) {
+    return { ok: false, error: "receivedAt must be an ISO timestamp." };
+  }
+
+  const parsed = parseFactoryJobRequest(value);
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  return {
+    ok: true,
+    value: {
+      ...parsed.value,
+      type: "factory.job.requested",
+      jobId,
+      receivedAt,
+    },
+  };
+}
+
 export function makeFactoryJobInput(jobId: string, request: FactoryJobRequest): FactoryJobInput {
   return {
     type: "factory.job.requested",
@@ -92,4 +127,3 @@ function optionalSource(value: unknown): FactorySignalSource | undefined | false
   }
   return false;
 }
-

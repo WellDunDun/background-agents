@@ -11,6 +11,7 @@ This branch intentionally starts clean instead of retrofitting the old backgroun
 - Daytona-backed workspaces for repo execution.
 - GitHub App tools for repo access, checkout, branch push, PR creation, and PR comments.
 - Runtime-verified GitHub webhook ingress for issue and PR review signals.
+- Runner-aware admission: Cloudflare can forward jobs to a Node runner for Codex subscription execution.
 - A finite kickoff workflow for Studio/CLI smoke tests.
 - Project skills for implementation, review, and scaffolding work.
 - Cloudflare migrations for Flue-generated Durable Objects.
@@ -19,8 +20,10 @@ This branch intentionally starts clean instead of retrofitting the old backgroun
 
 - npm install
 - npm run typecheck
-- npm run build
+- npm run build:cloudflare
+- npm run build:node
 - npm run dev
+- npm run dev:node
 - npm run deploy:dry-run
 - npm run deploy
 
@@ -28,11 +31,14 @@ Cloudflare development uses .dev.vars; production secrets should be set through 
 
 Flue builds the deployable Cloudflare Worker into dist/flue_factory. The deploy scripts run flue build first, then pass the generated Wrangler config in that output directory to Wrangler.
 
+Flue builds the Node runner into dist-node. Start it with npm run start:node after supplying runtime environment variables.
+
 ## Configuration
 
 Set these as local .dev.vars values for development and as Cloudflare Worker secrets for production:
 
 - FACTORY_API_TOKEN: bearer token required for manual API and config-status routes.
+- FACTORY_RUNNER_URL and FACTORY_RUNNER_TOKEN: set on the Cloudflare Worker when jobs should execute on the Node runner instead of inside the Worker.
 - OPENAI_CODEX_ACCESS_TOKEN or OPENAI_CODEX_REFRESH_TOKEN: ChatGPT/Codex subscription credential for openai-codex models. OPENAI_API_KEY is only for direct openai/* models.
 - DAYTONA_API_KEY: Daytona workspace provider key.
 - GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, GITHUB_APP_INSTALLATION_ID: GitHub App credentials for repository access and PR creation.
@@ -56,9 +62,46 @@ Expected JSON body:
   "baseBranch": "main"
 }
 
-The route returns 202 Accepted with the factory job id and Flue dispatch receipt. Actual agent work continues asynchronously in the target Cloudflare Durable Object.
+The route returns 202 Accepted with the factory job id and Flue dispatch receipt. If FACTORY_RUNNER_URL is configured, the Worker forwards the admitted job to the runner's protected /api/runner/jobs route. Otherwise the local Flue runtime dispatches it directly, which is intended for the Node runner and local development.
+
+When a runner is configured, clients should read events through the Worker-local stream proxy:
+
+GET /api/jobs/{instanceId}/events
+
+Send Authorization: Bearer <FACTORY_API_TOKEN>. The Worker uses FACTORY_RUNNER_TOKEN when it reads the runner's Flue stream.
 
 GET /api/config/status returns non-secret configuration readiness for the operator UI or deployment smoke tests. It also requires Authorization: Bearer <FACTORY_API_TOKEN>.
+
+## Node Runner
+
+Codex subscription-backed calls to chatgpt.com/backend-api are blocked from Cloudflare Workers, but the same refresh token works from Node. Production should therefore run the Worker as ingress and the Node target as the execution runner.
+
+Worker responsibilities:
+
+- Verify manual, GitHub, and Sentry ingress.
+- Admit jobs and forward them to the runner.
+- Proxy event streams back to clients.
+
+Runner responsibilities:
+
+- Execute the Flue orchestrator.
+- Create Daytona sandboxes.
+- Use the Codex refresh token.
+- Perform GitHub branch and PR work.
+
+Run the Node runner locally:
+
+1. npm run build:node
+2. PORT=3584 npm run start:node
+
+Required runner env values:
+
+- FACTORY_RUNNER_TOKEN: shared secret for Worker-to-runner admission and stream reads.
+- OPENAI_CODEX_REFRESH_TOKEN or OPENAI_CODEX_ACCESS_TOKEN.
+- DAYTONA_API_KEY and related Daytona settings.
+- GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, and GITHUB_APP_INSTALLATION_ID.
+
+Configure the Worker with FACTORY_RUNNER_URL and the same FACTORY_RUNNER_TOKEN.
 
 ## GitHub Webhook
 

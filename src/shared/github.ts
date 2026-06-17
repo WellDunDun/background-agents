@@ -1,4 +1,4 @@
-import type { FactoryEnv } from "./env.js";
+import { resolveFactoryEnv, type FactoryEnv } from "./env.js";
 
 export const GITHUB_API_BASE = "https://api.github.com";
 export const GITHUB_USER_AGENT = "flue-factory";
@@ -50,16 +50,17 @@ interface InstallationTokenResponse {
 }
 
 export function getGitHubAppConfig(env: FactoryEnv): GitHubAppConfig {
-  if (!env.GITHUB_APP_ID || !env.GITHUB_APP_PRIVATE_KEY || !env.GITHUB_APP_INSTALLATION_ID) {
+  const runtimeEnv = resolveFactoryEnv(env);
+  if (!runtimeEnv.GITHUB_APP_ID || !runtimeEnv.GITHUB_APP_PRIVATE_KEY || !runtimeEnv.GITHUB_APP_INSTALLATION_ID) {
     throw new Error(
       "GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, and GITHUB_APP_INSTALLATION_ID are required.",
     );
   }
 
   return {
-    appId: env.GITHUB_APP_ID,
-    privateKey: env.GITHUB_APP_PRIVATE_KEY,
-    installationId: env.GITHUB_APP_INSTALLATION_ID,
+    appId: runtimeEnv.GITHUB_APP_ID,
+    privateKey: runtimeEnv.GITHUB_APP_PRIVATE_KEY,
+    installationId: runtimeEnv.GITHUB_APP_INSTALLATION_ID,
   };
 }
 

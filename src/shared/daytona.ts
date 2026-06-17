@@ -6,7 +6,7 @@ import {
 } from "@daytona/sdk";
 
 import { daytona } from "../sandboxes/daytona.js";
-import type { FactoryEnv } from "./env.js";
+import { resolveFactoryEnv, type FactoryEnv } from "./env.js";
 
 export interface FactoryDaytonaWorkspace {
   sandbox: DaytonaSandbox;
@@ -17,14 +17,15 @@ export async function createFactoryDaytonaWorkspace(
   env: FactoryEnv,
   id: string,
 ): Promise<FactoryDaytonaWorkspace> {
-  if (!env.DAYTONA_API_KEY) {
+  const runtimeEnv = resolveFactoryEnv(env);
+  if (!runtimeEnv.DAYTONA_API_KEY) {
     throw new Error("DAYTONA_API_KEY is required to create factory workspaces.");
   }
 
   const client = new Daytona({
-    apiKey: env.DAYTONA_API_KEY,
-    ...(env.DAYTONA_API_URL ? { apiUrl: env.DAYTONA_API_URL } : {}),
-    ...(env.DAYTONA_TARGET ? { target: env.DAYTONA_TARGET } : {}),
+    apiKey: runtimeEnv.DAYTONA_API_KEY,
+    ...(runtimeEnv.DAYTONA_API_URL ? { apiUrl: runtimeEnv.DAYTONA_API_URL } : {}),
+    ...(runtimeEnv.DAYTONA_TARGET ? { target: runtimeEnv.DAYTONA_TARGET } : {}),
   });
 
   const sandboxName = "factory-" + sanitizeSandboxName(id);
@@ -37,24 +38,24 @@ export async function createFactoryDaytonaWorkspace(
     envVars: {
       FACTORY_JOB_ID: id,
     },
-    ...(numberFromEnv(env.DAYTONA_AUTO_STOP_MINUTES) !== undefined
-      ? { autoStopInterval: numberFromEnv(env.DAYTONA_AUTO_STOP_MINUTES) }
+    ...(numberFromEnv(runtimeEnv.DAYTONA_AUTO_STOP_MINUTES) !== undefined
+      ? { autoStopInterval: numberFromEnv(runtimeEnv.DAYTONA_AUTO_STOP_MINUTES) }
       : {}),
-    ...(numberFromEnv(env.DAYTONA_AUTO_ARCHIVE_MINUTES) !== undefined
-      ? { autoArchiveInterval: numberFromEnv(env.DAYTONA_AUTO_ARCHIVE_MINUTES) }
+    ...(numberFromEnv(runtimeEnv.DAYTONA_AUTO_ARCHIVE_MINUTES) !== undefined
+      ? { autoArchiveInterval: numberFromEnv(runtimeEnv.DAYTONA_AUTO_ARCHIVE_MINUTES) }
       : {}),
-    ...(numberFromEnv(env.DAYTONA_AUTO_DELETE_MINUTES) !== undefined
-      ? { autoDeleteInterval: numberFromEnv(env.DAYTONA_AUTO_DELETE_MINUTES) }
+    ...(numberFromEnv(runtimeEnv.DAYTONA_AUTO_DELETE_MINUTES) !== undefined
+      ? { autoDeleteInterval: numberFromEnv(runtimeEnv.DAYTONA_AUTO_DELETE_MINUTES) }
       : {}),
   };
 
-  const timeout = numberFromEnv(env.DAYTONA_CREATE_TIMEOUT_SECONDS);
+  const timeout = numberFromEnv(runtimeEnv.DAYTONA_CREATE_TIMEOUT_SECONDS);
   const options = timeout === undefined ? undefined : { timeout };
   const sandbox = await getOrCreateSandbox(client, sandboxName, async () =>
-    env.DAYTONA_IMAGE
-      ? await client.create({ ...baseParams, image: env.DAYTONA_IMAGE }, options)
+    runtimeEnv.DAYTONA_IMAGE
+      ? await client.create({ ...baseParams, image: runtimeEnv.DAYTONA_IMAGE }, options)
       : await client.create(
-          { ...baseParams, ...(env.DAYTONA_SNAPSHOT ? { snapshot: env.DAYTONA_SNAPSHOT } : {}) },
+          { ...baseParams, ...(runtimeEnv.DAYTONA_SNAPSHOT ? { snapshot: runtimeEnv.DAYTONA_SNAPSHOT } : {}) },
           options,
         ),
   );
