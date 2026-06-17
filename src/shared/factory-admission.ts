@@ -19,6 +19,14 @@ import {
   parseRepositorySlug,
 } from "./github.js";
 import {
+  getFactorySentryRouteConfig,
+  resolveConfiguredSentryRepositoryRoute,
+  updateFactorySentryRouteConfig,
+  type FactorySentryRouteConfig,
+  type FactorySentryRoutePatch,
+} from "./sentry-routes.js";
+import { resolveSentryRepositoryRoute, type NormalizedSentrySignal, type SentryRepositoryRoute } from "./sentry.js";
+import {
   getFactoryJobRecord,
   listFactoryJobRecords,
   recordFactoryJobAccepted,
@@ -263,6 +271,69 @@ export async function isFactoryAutomationActive(
   return list.automations.find((automation) => automation.source === source)?.enabled ?? true;
 }
 
+export async function readFactorySentryRouteConfig(env: FactoryEnv): Promise<FactorySentryRouteConfig> {
+  const runtimeEnv = resolveFactoryEnv(env);
+  const runnerUrl = normalizeRunnerUrl(runtimeEnv.FACTORY_RUNNER_URL);
+  if (!runnerUrl) {
+    return getFactorySentryRouteConfig(runtimeEnv);
+  }
+
+  const runnerToken = requireRunnerToken(runtimeEnv);
+  const response = await fetch(runnerUrl + "/api/runner/integrations/sentry/routes", {
+    headers: { Authorization: "Bearer " + runnerToken },
+    signal: AbortSignal.timeout(numberFromEnv(runtimeEnv.FACTORY_RUNNER_REQUEST_TIMEOUT_MS) ?? DEFAULT_RUNNER_REQUEST_TIMEOUT_MS),
+  });
+  const body = await parseJsonResponse(response);
+  if (!response.ok) {
+    throw new FactoryAdmissionError(
+      "Factory runner rejected Sentry route config request: " + response.status + " " + describeRunnerError(body),
+      response.status >= 500 ? 502 : response.status,
+    );
+  }
+
+  return normalizeRunnerSentryRouteConfig(body);
+}
+
+export async function updateFactorySentryRoutes(
+  env: FactoryEnv,
+  patch: FactorySentryRoutePatch,
+): Promise<FactorySentryRouteConfig> {
+  const runtimeEnv = resolveFactoryEnv(env);
+  const runnerUrl = normalizeRunnerUrl(runtimeEnv.FACTORY_RUNNER_URL);
+  if (!runnerUrl) {
+    return updateFactorySentryRouteConfig(runtimeEnv, patch);
+  }
+
+  const runnerToken = requireRunnerToken(runtimeEnv);
+  const response = await fetch(runnerUrl + "/api/runner/integrations/sentry/routes", {
+    method: "PATCH",
+    headers: {
+      Authorization: "Bearer " + runnerToken,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(patch),
+    signal: AbortSignal.timeout(numberFromEnv(runtimeEnv.FACTORY_RUNNER_REQUEST_TIMEOUT_MS) ?? DEFAULT_RUNNER_REQUEST_TIMEOUT_MS),
+  });
+  const body = await parseJsonResponse(response);
+  if (!response.ok) {
+    throw new FactoryAdmissionError(
+      "Factory runner rejected Sentry route config update: " + response.status + " " + describeRunnerError(body),
+      response.status >= 500 ? 502 : response.status,
+    );
+  }
+
+  return normalizeRunnerSentryRouteConfig(body);
+}
+
+export async function resolveFactorySentryRepositoryRoute(
+  env: FactoryEnv,
+  signal: Pick<NormalizedSentrySignal, "sentryProject">,
+): Promise<SentryRepositoryRoute | null> {
+  const runtimeEnv = resolveFactoryEnv(env);
+  const configured = resolveConfiguredSentryRepositoryRoute(signal, await readFactorySentryRouteConfig(runtimeEnv));
+  return configured ?? resolveSentryRepositoryRoute(signal, runtimeEnv);
+}
+
 export async function readFactoryReadiness(env: FactoryEnv): Promise<FactoryReadiness> {
   const runtimeEnv = resolveFactoryEnv(env);
   const workerReadiness = await getFactoryReadiness(runtimeEnv, { runtime: "worker" });
@@ -482,6 +553,29 @@ function normalizeRunnerAutomationState(value: unknown): FactoryAutomationState 
     updatedAt: value.updatedAt,
     ...(typeof value.reason === "string" ? { reason: value.reason } : {}),
   };
+}
+
+function normalizeRunnerSentryRouteConfig(value: unknown): FactorySentryRouteConfig {
+  if (!isRecord(value) || !isRecord(value.routes) || typeof value.updatedAt !== "string") {
+    throw new FactoryAdmissionError("Factory runner returned an invalid Sentry route config.");
+  }
+
+  const routes: Record<string, SentryRepositoryRoute> = {};
+  for (const [project, route] of Object.entries(value.routes)) {
+    if (isSentryRoute(route)) {
+      routes[project] = route;
+    }
+  }
+
+  return {
+    routes,
+    ...(isSentryRoute(value.defaultRoute) ? { defaultRoute: value.defaultRoute } : {}),
+    updatedAt: value.updatedAt,
+  };
+}
+
+function isSentryRoute(value: unknown): value is SentryRepositoryRoute {
+  return isRecord(value) && typeof value.repo === "string" && typeof value.baseBranch === "string";
 }
 
 function normalizeRunnerReadiness(value: unknown): FactoryReadiness {

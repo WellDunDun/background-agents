@@ -81,6 +81,8 @@ GET /api/jobs lists recent app-owned factory job admission records. GET /api/job
 
 GET /api/automations lists app-owned automation state for GitHub and Sentry signal sources. PATCH /api/automations/{source} accepts `{ "enabled": false, "reason": "..." }` or `{ "enabled": true }` for `github` or `sentry`. These routes require Authorization: Bearer <FACTORY_API_TOKEN>. In production, the Worker proxies reads and writes to the Node runner so automation state survives Worker deploys. Paused GitHub and Sentry automations acknowledge webhooks with `skipped=true` and do not dispatch long-running agent work.
 
+GET /api/integrations/sentry/routes returns app-owned Sentry project-to-repository routing. PATCH /api/integrations/sentry/routes accepts `{ "routes": { "project-slug": { "repo": "owner/name", "baseBranch": "main" } }, "defaultRoute": null }`. These routes require Authorization: Bearer <FACTORY_API_TOKEN>. In production, the Worker proxies reads and writes to the Node runner so Sentry routing can be changed without a Worker redeploy. The webhook resolver checks app-owned routes first, then falls back to SENTRY_REPO_MAP and SENTRY_DEFAULT_REPO.
+
 GET /api/config/status returns non-secret configuration readiness for the operator UI or deployment smoke tests. It also requires Authorization: Bearer <FACTORY_API_TOKEN>.
 
 GET /api/readiness returns non-secret production readiness checks with pass/warn/block statuses for Worker ingress, runner runtime, Codex auth, workspace configuration, GitHub App access, writable GitHub repositories, GitHub webhook, Sentry webhook, and Sentry repository routing. It requires Authorization: Bearer <FACTORY_API_TOKEN>. When FACTORY_RUNNER_URL is configured, the Worker reads the runner's protected /api/runner/readiness endpoint and combines both scopes so runner-owned secrets do not need to be duplicated in the Worker. This endpoint is intended for the operator UI and deployment smoke tests; it reports external setup blockers without exposing secret values.
@@ -129,6 +131,8 @@ The runner also sets FACTORY_JOB_LEDGER_PATH=/home/daytona/signal-factory-runner
 
 The runner also sets FACTORY_AUTOMATION_STATE_PATH=/home/daytona/signal-factory-runner-data/automations.json by default. This keeps operator pause/resume state outside the app deploy directory so runner redeploys do not reset automations.
 
+The runner also sets FACTORY_SENTRY_ROUTE_CONFIG_PATH=/home/daytona/signal-factory-runner-data/sentry-routes.json by default. This keeps Sentry project-to-repository routing outside the app deploy directory so runner redeploys do not reset integration settings.
+
 Required runner env values:
 
 - FACTORY_RUNNER_TOKEN: shared secret for Worker-to-runner admission and stream reads.
@@ -156,4 +160,6 @@ The Sentry webhook route is mounted at:
 
 https://<worker-host>/webhooks/sentry
 
-Configure Sentry to send issue alert or critical metric alert webhooks with the same SENTRY_WEBHOOK_SECRET. Sentry payloads are signed with the sentry-hook-signature HMAC header. The factory resolves accepted Sentry signals through SENTRY_REPO_MAP first, then `*` / `_default` map entries, then SENTRY_DEFAULT_REPO and SENTRY_DEFAULT_BASE_BRANCH. It admits only levels in SENTRY_ACCEPT_LEVELS.
+Configure Sentry to send issue alert or critical metric alert webhooks with the same SENTRY_WEBHOOK_SECRET. Sentry payloads are signed with the sentry-hook-signature HMAC header. The factory resolves accepted Sentry signals through app-owned runtime routes first, then SENTRY_REPO_MAP, then `*` / `_default` map entries, then SENTRY_DEFAULT_REPO and SENTRY_DEFAULT_BASE_BRANCH. It admits only levels in SENTRY_ACCEPT_LEVELS.
+
+Sentry routing can also be configured at runtime through `PATCH /api/integrations/sentry/routes`. Runtime routes are checked before env routes, which keeps integration changes out of redeploys.

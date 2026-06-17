@@ -38,6 +38,7 @@ async function main() {
   assertStatus("repositories", repositories.status, 200);
   const repoList = Array.isArray(repositories.body.repositories) ? repositories.body.repositories : [];
   const writableRepos = repoList.filter((repo) => repo && repo.writable === true);
+  const sentryRoutes = await runSentryRouteSmoke(workerUrl, apiToken, repoList);
 
   const agentSmoke = options.skipAgent
     ? { skipped: true }
@@ -65,6 +66,7 @@ async function main() {
         },
         readiness: summarizeReadiness(readiness.body),
         automations,
+        sentryRoutes,
         agentSmoke,
         jobLedger,
         readOnlyGuard,
@@ -136,6 +138,61 @@ async function runAutomationSmoke(workerUrl, apiToken) {
   };
 }
 
+async function runSentryRouteSmoke(workerUrl, apiToken, repositories) {
+  const list = await readJson(workerUrl + "/api/integrations/sentry/routes", {
+    headers: authHeaders(apiToken),
+  });
+  assertStatus("sentry route config", list.status, 200);
+
+  const targetRepo = repositories.find((repo) => repo && repo.fullName)?.fullName;
+  if (!targetRepo) {
+    return { skipped: true, reason: "no_visible_repository" };
+  }
+
+  const originalRoutes = isPlainObject(list.body.routes) ? list.body.routes : {};
+  const originalDefaultRoute = isPlainObject(list.body.defaultRoute) ? list.body.defaultRoute : null;
+  const nextRoutes = {
+    ...originalRoutes,
+    "smoke-project": { repo: targetRepo, baseBranch: "main" },
+  };
+
+  const updated = await patchSentryRoutes(workerUrl, apiToken, {
+    routes: nextRoutes,
+    defaultRoute: originalDefaultRoute,
+  });
+  if (updated.body?.routes?.["smoke-project"]?.repo !== targetRepo) {
+    throw new Error("Sentry smoke route did not persist: " + JSON.stringify(updated.body));
+  }
+
+  const restored = await patchSentryRoutes(workerUrl, apiToken, {
+    routes: originalRoutes,
+    defaultRoute: originalDefaultRoute,
+  });
+  if (Boolean(restored.body?.routes?.["smoke-project"]) !== Boolean(originalRoutes["smoke-project"])) {
+    throw new Error("Sentry smoke route restore did not persist: " + JSON.stringify(restored.body));
+  }
+
+  return {
+    routeCount: Object.keys(originalRoutes).length,
+    updateStatus: updated.status,
+    restoreStatus: restored.status,
+    smokeProjectPersisted: true,
+  };
+}
+
+async function patchSentryRoutes(workerUrl, apiToken, patch) {
+  const response = await readJson(workerUrl + "/api/integrations/sentry/routes", {
+    method: "PATCH",
+    headers: {
+      ...authHeaders(apiToken),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(patch),
+  });
+  assertStatus("sentry route patch", response.status, 200);
+  return response;
+}
+
 async function patchAutomation(workerUrl, apiToken, source, patch) {
   const response = await readJson(workerUrl + "/api/automations/" + encodeURIComponent(source), {
     method: "PATCH",
@@ -147,6 +204,10 @@ async function patchAutomation(workerUrl, apiToken, source, patch) {
   });
   assertStatus(source + " automation patch", response.status, 200);
   return response;
+}
+
+function isPlainObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function parseArgs(args) {

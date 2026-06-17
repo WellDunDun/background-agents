@@ -5,6 +5,7 @@ import {
   listInstallationRepositories,
   type InstallationRepository,
 } from "./github.js";
+import { getFactorySentryRouteConfig } from "./sentry-routes.js";
 
 export type FactoryReadinessRuntime = "worker" | "runner" | "combined";
 export type FactoryReadinessState = "ready" | "needs_setup" | "blocked";
@@ -53,6 +54,14 @@ export async function getFactoryReadiness(
     repositoryCount: 0,
     writableRepositoryCount: 0,
   };
+  let sentryRouteConfigured = Boolean(env.SENTRY_REPO_MAP || env.SENTRY_DEFAULT_REPO);
+
+  if (options.runtime === "runner") {
+    const routeConfig = await getFactorySentryRouteConfig(env).catch(() => undefined);
+    sentryRouteConfigured =
+      sentryRouteConfigured ||
+      Boolean(routeConfig && (Object.keys(routeConfig.routes).length > 0 || routeConfig.defaultRoute));
+  }
 
   if (options.runtime === "worker") {
     addWorkerChecks(checks, env);
@@ -73,7 +82,7 @@ export async function getFactoryReadiness(
     github: githubSummary,
     sentry: {
       webhookConfigured: Boolean(env.SENTRY_WEBHOOK_SECRET),
-      routeConfigured: Boolean(env.SENTRY_REPO_MAP || env.SENTRY_DEFAULT_REPO),
+      routeConfigured: sentryRouteConfigured,
     },
   });
 }
@@ -82,15 +91,21 @@ export function combineFactoryReadiness(
   worker: FactoryReadiness,
   runner: FactoryReadiness,
 ): FactoryReadiness {
+  const workerChecks = runner.sentry.routeConfigured
+    ? worker.checks.filter((check) => check.id !== "sentry-route")
+    : worker.checks;
   return buildReadiness({
     runtime: "combined",
     model: worker.model,
     checks: [
-      ...worker.checks.map((check) => scopeCheck("worker", check)),
+      ...workerChecks.map((check) => scopeCheck("worker", check)),
       ...runner.checks.map((check) => scopeCheck("runner", check)),
     ],
     github: worker.github,
-    sentry: worker.sentry,
+    sentry: {
+      webhookConfigured: worker.sentry.webhookConfigured,
+      routeConfigured: worker.sentry.routeConfigured || runner.sentry.routeConfigured,
+    },
     scopes: { worker, runner },
   });
 }
