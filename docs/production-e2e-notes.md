@@ -15,7 +15,7 @@ Last checked: 2026-06-17
   - Sentry webhook verification
 - A no-repository `POST /api/jobs` production smoke request returns 202 and opens a durable Flue agent event stream.
 
-## Current Blocker
+## Historical Codex Worker Blocker
 
 Codex subscription-backed model calls do not complete from the Cloudflare Worker runtime.
 
@@ -28,7 +28,7 @@ Observed production stream behavior:
 
 The same Codex refresh token works from local Node with the same `openai-codex/gpt-5.5` model and `transport: "sse"`, so the token itself is valid.
 
-## Implication
+## Architecture Implication
 
 For the Codex subscription path, the factory should not execute ChatGPT/Codex provider calls inside Cloudflare Workers. Keep the Worker as the secure ingress/control plane, but run the subscription-backed coding runtime in a normal Node environment, ideally the Daytona runner/sandbox layer, then stream durable events back through the Worker.
 
@@ -56,8 +56,6 @@ The codebase now supports this split:
 - Start the Node runner from the same source with npm run build:node and npm run start:node.
 - Leave FACTORY_RUNNER_URL unset on the runner so /api/runner/jobs dispatches the Flue orchestrator locally.
 - Read runner-backed job streams through the Worker at /api/jobs/{instanceId}/events.
-
-The next production proof requires hosting the Node runner, setting FACTORY_RUNNER_URL on the Worker, then rerunning the no-repo smoke job. A passing run should show model output instead of a chatgpt.com Cloudflare block page.
 
 Daytona runner deployment is scripted with npm run runner:deploy:daytona. The script creates or reuses a public Daytona sandbox named signal-factory-runner, uploads the committed source archive, writes runner secrets to .runner.env inside the sandbox, builds dist-node, starts npm run start:node as a Daytona background session, and returns the public preview URL. The Worker should store that URL in FACTORY_RUNNER_URL and the shared token in FACTORY_RUNNER_TOKEN.
 
@@ -88,6 +86,15 @@ Latest production smoke:
 - `GET /api/jobs/{instanceId}/events?offset=-1&live=sse` returned a live Flue event stream with `operation_start`, `agent_start`, `turn_start`, `text_delta`, `turn_messages`, `turn`, and `agent_end`.
 - The stream reached `openai-codex/gpt-5.5`, produced the expected smoke-test text, and had no Codex provider/auth/Cloudflare block error.
 
+Latest deployed version after repo lifecycle hardening:
+
+- Worker deploy succeeded: version `21b47edd-585f-4c95-a850-21c8e246c085`.
+- Daytona runner deploy succeeded and refreshed `FACTORY_RUNNER_URL` / `FACTORY_RUNNER_TOKEN` on the Worker.
+- `GET /api/github/repositories` returned 200 in production and exposed repository write-readiness for the operator UI.
+- The current GitHub App installation exposes `WellDunDun/canary-compact`, but GitHub reports `writable=false` with no pull/push/triage/maintain/admin permissions. A repo-backed PR proof requires installing or updating the GitHub App with write access to at least one target repository.
+- A post-deploy no-repository smoke still returned 202 with `executionTarget=runner`, streamed 45 live SSE events, reached `openai-codex/gpt-5.5`, emitted `agent_end`, and had no provider/auth/Cloudflare block error.
+
 Remaining product setup:
 
+- Update the GitHub App installation so at least one target repository has write access. Then run the repo-backed production proof that creates a draft PR and stops before merge.
 - Sentry is not fully actionable until `SENTRY_DEFAULT_REPO` or a per-project routing table is configured.
