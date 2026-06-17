@@ -106,6 +106,8 @@ The runner script creates a Daytona sandbox from `node:22-bookworm` with 2 vCPU,
 
 By default the deployed Daytona runner sets FACTORY_WORKSPACE_PROVIDER=runner. That means the runner sandbox itself is the Flue local workspace boundary for jobs, with per-job directories under /tmp/signal-factory-jobs. This avoids a nested Daytona runner creating a second Daytona sandbox and then failing on provider proxy resets. For a non-Daytona Node host, unset FACTORY_WORKSPACE_PROVIDER to return to per-job Daytona workspaces.
 
+The Codex OAuth refresh token is rotating. The runner sets FACTORY_CODEX_CREDENTIALS_PATH=.runner.env so successful refreshes update the runner's private env file and in-memory process env before the old refresh token is reused.
+
 Required runner env values:
 
 - FACTORY_RUNNER_TOKEN: shared secret for Worker-to-runner admission and stream reads.
