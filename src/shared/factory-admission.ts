@@ -1,6 +1,15 @@
 import { dispatch } from "@flue/runtime";
 
 import orchestrator from "../agents/orchestrator.js";
+import {
+  getFactoryAutomation,
+  listFactoryAutomations,
+  updateFactoryAutomation,
+  type FactoryAutomationList,
+  type FactoryAutomationPatch,
+  type FactoryAutomationSource,
+  type FactoryAutomationState,
+} from "./automations.js";
 import { resolveFactoryEnv, type FactoryEnv } from "./env.js";
 import type { FactoryJobInput } from "./factory-types.js";
 import {
@@ -183,6 +192,75 @@ export async function readFactoryJobRecord(
   }
 
   return normalizeRunnerJobRecord(body);
+}
+
+export async function readFactoryAutomationList(env: FactoryEnv): Promise<FactoryAutomationList> {
+  const runtimeEnv = resolveFactoryEnv(env);
+  const runnerUrl = normalizeRunnerUrl(runtimeEnv.FACTORY_RUNNER_URL);
+  if (!runnerUrl) {
+    return listFactoryAutomations(runtimeEnv);
+  }
+
+  const runnerToken = requireRunnerToken(runtimeEnv);
+  const response = await fetch(runnerUrl + "/api/runner/automations", {
+    headers: { Authorization: "Bearer " + runnerToken },
+    signal: AbortSignal.timeout(numberFromEnv(runtimeEnv.FACTORY_RUNNER_REQUEST_TIMEOUT_MS) ?? DEFAULT_RUNNER_REQUEST_TIMEOUT_MS),
+  });
+  const body = await parseJsonResponse(response);
+  if (!response.ok) {
+    throw new FactoryAdmissionError(
+      "Factory runner rejected automation list request: " + response.status + " " + describeRunnerError(body),
+      response.status >= 500 ? 502 : response.status,
+    );
+  }
+
+  return normalizeRunnerAutomationList(body);
+}
+
+export async function updateFactoryAutomationState(
+  env: FactoryEnv,
+  source: FactoryAutomationSource,
+  patch: FactoryAutomationPatch,
+): Promise<FactoryAutomationState> {
+  const runtimeEnv = resolveFactoryEnv(env);
+  const runnerUrl = normalizeRunnerUrl(runtimeEnv.FACTORY_RUNNER_URL);
+  if (!runnerUrl) {
+    return updateFactoryAutomation(runtimeEnv, source, patch);
+  }
+
+  const runnerToken = requireRunnerToken(runtimeEnv);
+  const response = await fetch(runnerUrl + "/api/runner/automations/" + encodeURIComponent(source), {
+    method: "PATCH",
+    headers: {
+      Authorization: "Bearer " + runnerToken,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(patch),
+    signal: AbortSignal.timeout(numberFromEnv(runtimeEnv.FACTORY_RUNNER_REQUEST_TIMEOUT_MS) ?? DEFAULT_RUNNER_REQUEST_TIMEOUT_MS),
+  });
+  const body = await parseJsonResponse(response);
+  if (!response.ok) {
+    throw new FactoryAdmissionError(
+      "Factory runner rejected automation update request: " + response.status + " " + describeRunnerError(body),
+      response.status >= 500 ? 502 : response.status,
+    );
+  }
+
+  return normalizeRunnerAutomationState(body);
+}
+
+export async function isFactoryAutomationActive(
+  env: FactoryEnv,
+  source: FactoryAutomationSource,
+): Promise<boolean> {
+  const runtimeEnv = resolveFactoryEnv(env);
+  const runnerUrl = normalizeRunnerUrl(runtimeEnv.FACTORY_RUNNER_URL);
+  if (!runnerUrl) {
+    return (await getFactoryAutomation(runtimeEnv, source)).enabled;
+  }
+
+  const list = await readFactoryAutomationList(runtimeEnv);
+  return list.automations.find((automation) => automation.source === source)?.enabled ?? true;
 }
 
 export async function readFactoryReadiness(env: FactoryEnv): Promise<FactoryReadiness> {
@@ -375,6 +453,34 @@ function normalizeRunnerJobRecord(value: unknown): FactoryJobRecord {
     ...record,
     executionTarget: "runner",
     streamUrl: "/api/jobs/" + encodeURIComponent(record.instanceId) + "/events",
+  };
+}
+
+function normalizeRunnerAutomationList(value: unknown): FactoryAutomationList {
+  if (!isRecord(value) || !Array.isArray(value.automations)) {
+    throw new FactoryAdmissionError("Factory runner returned an invalid automation list.");
+  }
+
+  return {
+    automations: value.automations.map((automation) => normalizeRunnerAutomationState(automation)),
+  };
+}
+
+function normalizeRunnerAutomationState(value: unknown): FactoryAutomationState {
+  if (
+    !isRecord(value) ||
+    (value.source !== "github" && value.source !== "sentry") ||
+    typeof value.enabled !== "boolean" ||
+    typeof value.updatedAt !== "string"
+  ) {
+    throw new FactoryAdmissionError("Factory runner returned an invalid automation state.");
+  }
+
+  return {
+    source: value.source,
+    enabled: value.enabled,
+    updatedAt: value.updatedAt,
+    ...(typeof value.reason === "string" ? { reason: value.reason } : {}),
   };
 }
 

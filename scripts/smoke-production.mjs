@@ -30,6 +30,8 @@ async function main() {
   });
   assertStatus("readiness", readiness.status, 200);
 
+  const automations = await runAutomationSmoke(workerUrl, apiToken);
+
   const repositories = await readJson(workerUrl + "/api/github/repositories", {
     headers: authHeaders(apiToken),
   });
@@ -62,6 +64,7 @@ async function main() {
           })),
         },
         readiness: summarizeReadiness(readiness.body),
+        automations,
         agentSmoke,
         jobLedger,
         readOnlyGuard,
@@ -97,6 +100,53 @@ async function readJobLedgerSmoke(workerUrl, apiToken, agentSmoke) {
     listedSmokeJob,
     detailStatus: detail?.status,
   };
+}
+
+async function runAutomationSmoke(workerUrl, apiToken) {
+  const list = await readJson(workerUrl + "/api/automations", {
+    headers: authHeaders(apiToken),
+  });
+  assertStatus("automation list", list.status, 200);
+  const automations = Array.isArray(list.body.automations) ? list.body.automations : [];
+  const sentry = automations.find((automation) => automation && automation.source === "sentry");
+  const originalEnabled = sentry?.enabled !== false;
+  const originalReason = typeof sentry?.reason === "string" ? sentry.reason : "";
+
+  const paused = await patchAutomation(workerUrl, apiToken, "sentry", {
+    enabled: false,
+    reason: "production smoke pause/restore check",
+  });
+  if (paused.body?.enabled !== false) {
+    throw new Error("Sentry automation pause did not persist: " + JSON.stringify(paused.body));
+  }
+
+  const restored = await patchAutomation(workerUrl, apiToken, "sentry", {
+    enabled: originalEnabled,
+    reason: originalReason,
+  });
+  if (restored.body?.enabled !== originalEnabled) {
+    throw new Error("Sentry automation restore did not persist: " + JSON.stringify(restored.body));
+  }
+
+  return {
+    count: automations.length,
+    sentryPausedStatus: paused.status,
+    sentryRestoredStatus: restored.status,
+    sentryRestoredEnabled: restored.body.enabled,
+  };
+}
+
+async function patchAutomation(workerUrl, apiToken, source, patch) {
+  const response = await readJson(workerUrl + "/api/automations/" + encodeURIComponent(source), {
+    method: "PATCH",
+    headers: {
+      ...authHeaders(apiToken),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(patch),
+  });
+  assertStatus(source + " automation patch", response.status, 200);
+  return response;
 }
 
 function parseArgs(args) {

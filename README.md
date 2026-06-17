@@ -79,6 +79,8 @@ Send Authorization: Bearer <FACTORY_API_TOKEN>. The Worker uses FACTORY_RUNNER_T
 
 GET /api/jobs lists recent app-owned factory job admission records. GET /api/jobs/{instanceId} returns one record. In production these endpoints proxy to the Node runner ledger through FACTORY_RUNNER_TOKEN and rewrite streamUrl to the Worker event proxy.
 
+GET /api/automations lists app-owned automation state for GitHub and Sentry signal sources. PATCH /api/automations/{source} accepts `{ "enabled": false, "reason": "..." }` or `{ "enabled": true }` for `github` or `sentry`. These routes require Authorization: Bearer <FACTORY_API_TOKEN>. In production, the Worker proxies reads and writes to the Node runner so automation state survives Worker deploys. Paused GitHub and Sentry automations acknowledge webhooks with `skipped=true` and do not dispatch long-running agent work.
+
 GET /api/config/status returns non-secret configuration readiness for the operator UI or deployment smoke tests. It also requires Authorization: Bearer <FACTORY_API_TOKEN>.
 
 GET /api/readiness returns non-secret production readiness checks with pass/warn/block statuses for Worker ingress, runner runtime, Codex auth, workspace configuration, GitHub App access, writable GitHub repositories, GitHub webhook, Sentry webhook, and Sentry repository routing. It requires Authorization: Bearer <FACTORY_API_TOKEN>. When FACTORY_RUNNER_URL is configured, the Worker reads the runner's protected /api/runner/readiness endpoint and combines both scopes so runner-owned secrets do not need to be duplicated in the Worker. This endpoint is intended for the operator UI and deployment smoke tests; it reports external setup blockers without exposing secret values.
@@ -124,6 +126,8 @@ By default the deployed Daytona runner sets FACTORY_WORKSPACE_PROVIDER=runner. T
 The Codex OAuth refresh token is rotating. The runner sets FACTORY_CODEX_CREDENTIALS_PATH=.runner.env so successful refreshes update the runner's private env file and in-memory process env before the old refresh token is reused.
 
 The runner also sets FACTORY_JOB_LEDGER_PATH=/home/daytona/signal-factory-runner-data/jobs.jsonl by default. This keeps non-secret job admission records outside the app deploy directory so runner redeploys do not wipe the sessions list.
+
+The runner also sets FACTORY_AUTOMATION_STATE_PATH=/home/daytona/signal-factory-runner-data/automations.json by default. This keeps operator pause/resume state outside the app deploy directory so runner redeploys do not reset automations.
 
 Required runner env values:
 

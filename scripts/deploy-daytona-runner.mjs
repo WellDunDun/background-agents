@@ -30,6 +30,7 @@ const OPTIONAL_RUNNER_ENV_KEYS = [
   "OPENAI_CODEX_REFRESH_TOKEN",
   "FACTORY_CODEX_CREDENTIALS_PATH",
   "FACTORY_JOB_LEDGER_PATH",
+  "FACTORY_AUTOMATION_STATE_PATH",
   "DAYTONA_API_URL",
   "DAYTONA_TARGET",
   "DAYTONA_IMAGE",
@@ -211,6 +212,7 @@ function buildRunnerEnv(env) {
   const runnerEnv = {
     FACTORY_DEFAULT_MODEL: model,
     FACTORY_JOB_LEDGER_PATH: env.FACTORY_JOB_LEDGER_PATH || "/home/daytona/signal-factory-runner-data/jobs.jsonl",
+    FACTORY_AUTOMATION_STATE_PATH: env.FACTORY_AUTOMATION_STATE_PATH || "/home/daytona/signal-factory-runner-data/automations.json",
     FACTORY_WORKSPACE_PROVIDER: "runner",
     FACTORY_RUNNER_WORKSPACE_ROOT: env.FACTORY_RUNNER_WORKSPACE_ROOT || "/tmp/signal-factory-jobs",
     FACTORY_CODEX_CREDENTIALS_PATH: env.FACTORY_CODEX_CREDENTIALS_PATH || ".runner.env",

@@ -2,7 +2,7 @@ import type { Context } from "hono";
 
 import { makeFactoryJobInput, type FactoryJobRequest } from "./factory-types.js";
 import { resolveFactoryEnv, type FactoryEnv } from "./env.js";
-import { admitFactoryJob } from "./factory-admission.js";
+import { admitFactoryJob, isFactoryAutomationActive } from "./factory-admission.js";
 
 const GITHUB_BODY_LIMIT_BYTES = 25 * 1024 * 1024;
 const REGEX_SPECIAL_CHARS = "\\^$.*+?()[]{}|";
@@ -241,6 +241,10 @@ async function admitGitHubFactoryJob(
   instanceId: string,
   request: FactoryJobRequest,
 ): Promise<JsonValue> {
+  if (!(await isFactoryAutomationActive(env, "github"))) {
+    return { ok: true, skipped: true, reason: "automation_paused", source: "github" };
+  }
+
   const admission = await admitFactoryJob(env, makeFactoryJobInput(instanceId, request));
   return {
     ...admission,

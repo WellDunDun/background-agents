@@ -11,11 +11,19 @@ import {
   admitFactoryJob,
   dispatchLocalFactoryJob,
   FactoryAdmissionError,
+  isFactoryAutomationActive,
+  readFactoryAutomationList,
   readFactoryJobList,
   readFactoryJobRecord,
   readFactoryReadiness,
+  updateFactoryAutomationState,
   proxyRunnerAgentEvents,
 } from "./shared/factory-admission.js";
+import {
+  listFactoryAutomations,
+  parseFactoryAutomationSource,
+  updateFactoryAutomation,
+} from "./shared/automations.js";
 import { getFactoryJobRecord, listFactoryJobRecords } from "./shared/job-ledger.js";
 import { handleGitHubWebhook } from "./shared/github-webhook.js";
 import {
@@ -91,6 +99,41 @@ app.get("/api/jobs/:instanceId", async (c) => {
   return record ? c.json(record) : c.json({ error: "Job not found." }, 404);
 });
 
+app.get("/api/automations", async (c) => {
+  const authError = requireFactoryApiToken(c);
+  if (authError) {
+    return authError;
+  }
+
+  const list = await readFactoryAutomationList(resolveFactoryEnv(c.env)).catch((error: unknown) =>
+    factoryAdmissionErrorResponse(c, error),
+  );
+  return list instanceof Response ? list : c.json(list);
+});
+
+app.patch("/api/automations/:source", async (c) => {
+  const authError = requireFactoryApiToken(c);
+  if (authError) {
+    return authError;
+  }
+
+  const source = parseFactoryAutomationSource(c.req.param("source"));
+  if (!source) {
+    return c.json({ error: "Unknown automation source." }, 404);
+  }
+
+  const payload = await c.req.json().catch(() => null);
+  const patch = parseAutomationPatch(payload);
+  if (!patch.ok) {
+    return c.json({ error: patch.error }, 400);
+  }
+
+  const updated = await updateFactoryAutomationState(resolveFactoryEnv(c.env), source, patch.value).catch(
+    (error: unknown) => factoryAdmissionErrorResponse(c, error),
+  );
+  return updated instanceof Response ? updated : c.json(updated);
+});
+
 app.post("/api/runner/jobs", async (c) => {
   const authError = requireFactoryRunnerToken(c);
   if (authError) {
@@ -124,6 +167,35 @@ app.get("/api/runner/jobs/:instanceId", async (c) => {
 
   const record = await getFactoryJobRecord(resolveFactoryEnv(c.env), c.req.param("instanceId"));
   return record ? c.json(record) : c.json({ error: "Job not found." }, 404);
+});
+
+app.get("/api/runner/automations", async (c) => {
+  const authError = requireFactoryRunnerToken(c);
+  if (authError) {
+    return authError;
+  }
+
+  return c.json(await listFactoryAutomations(resolveFactoryEnv(c.env)));
+});
+
+app.patch("/api/runner/automations/:source", async (c) => {
+  const authError = requireFactoryRunnerToken(c);
+  if (authError) {
+    return authError;
+  }
+
+  const source = parseFactoryAutomationSource(c.req.param("source"));
+  if (!source) {
+    return c.json({ error: "Unknown automation source." }, 404);
+  }
+
+  const payload = await c.req.json().catch(() => null);
+  const patch = parseAutomationPatch(payload);
+  if (!patch.ok) {
+    return c.json({ error: patch.error }, 400);
+  }
+
+  return c.json(await updateFactoryAutomation(resolveFactoryEnv(c.env), source, patch.value));
 });
 
 app.get("/api/runner/readiness", async (c) => {
@@ -226,6 +298,10 @@ app.post("/webhooks/sentry", async (c) => {
 
   if (!isAcceptedSentryLevel(signal.sentryLevel, env.SENTRY_ACCEPT_LEVELS)) {
     return c.json({ ok: true, skipped: true, reason: "level_not_accepted" });
+  }
+
+  if (!(await isFactoryAutomationActive(env, "sentry"))) {
+    return c.json({ ok: true, skipped: true, reason: "automation_paused", source: "sentry" });
   }
 
   const route = resolveSentryRepositoryRoute(signal, env);
@@ -363,6 +439,35 @@ function parsePositiveInteger(value: string | undefined): number | undefined {
   }
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function parseAutomationPatch(
+  value: unknown,
+): { ok: true; value: { enabled?: boolean; reason?: string } } | { ok: false; error: string } {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return { ok: false, error: "Expected a JSON object." };
+  }
+
+  const record = value as Record<string, unknown>;
+  const patch: { enabled?: boolean; reason?: string } = {};
+  if ("enabled" in record) {
+    if (typeof record.enabled !== "boolean") {
+      return { ok: false, error: "enabled must be a boolean when provided." };
+    }
+    patch.enabled = record.enabled;
+  }
+  if ("reason" in record) {
+    if (record.reason !== undefined && record.reason !== null && typeof record.reason !== "string") {
+      return { ok: false, error: "reason must be a string when provided." };
+    }
+    if (typeof record.reason === "string") {
+      patch.reason = record.reason;
+    }
+  }
+  if (!("enabled" in patch) && !("reason" in patch)) {
+    return { ok: false, error: "Provide enabled or reason." };
+  }
+  return { ok: true, value: patch };
 }
 
 function resolveManualJobId(
