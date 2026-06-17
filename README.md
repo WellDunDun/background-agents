@@ -72,6 +72,8 @@ Send Authorization: Bearer <FACTORY_API_TOKEN>. The Worker uses FACTORY_RUNNER_T
 
 GET /api/config/status returns non-secret configuration readiness for the operator UI or deployment smoke tests. It also requires Authorization: Bearer <FACTORY_API_TOKEN>.
 
+GET /api/github/repositories returns the GitHub App installation repositories visible to the factory, including default branch and write-readiness flags for repo selection UIs. It requires Authorization: Bearer <FACTORY_API_TOKEN>. A repo-backed job needs a repository where writable=true; otherwise the agent can inspect but cannot push a factory branch or create the draft PR.
+
 ## Node Runner
 
 Codex subscription-backed calls to chatgpt.com/backend-api are blocked from Cloudflare Workers, but the same refresh token works from Node. Production should therefore run the Worker as ingress and the Node target as the execution runner.

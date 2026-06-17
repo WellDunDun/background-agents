@@ -26,6 +26,15 @@ export interface InstallationRepository {
   defaultBranch: string;
   language?: string | null;
   topics?: string[];
+  permissions?: GitHubRepositoryPermissions;
+}
+
+export interface GitHubRepositoryPermissions {
+  admin?: boolean;
+  maintain?: boolean;
+  push?: boolean;
+  triage?: boolean;
+  pull?: boolean;
 }
 
 export interface PullRequestResult {
@@ -115,6 +124,7 @@ export async function getInstallationRepository(
     language?: string | null;
     topics?: string[];
     owner: { login: string };
+    permissions?: GitHubRepositoryPermissions;
   };
 
   return {
@@ -127,6 +137,7 @@ export async function getInstallationRepository(
     defaultBranch: data.default_branch,
     language: data.language,
     topics: data.topics,
+    permissions: data.permissions,
   };
 }
 
@@ -157,6 +168,7 @@ export async function listInstallationRepositories(
         language?: string | null;
         topics?: string[];
         owner: { login: string };
+        permissions?: GitHubRepositoryPermissions;
       }>;
     };
 
@@ -171,6 +183,7 @@ export async function listInstallationRepositories(
         defaultBranch: repo.default_branch,
         language: repo.language,
         topics: repo.topics,
+        permissions: repo.permissions,
       })),
     );
 

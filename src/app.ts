@@ -19,6 +19,7 @@ import {
   requireFactoryRunnerToken,
   requireFactoryTransportToken,
 } from "./shared/http-auth.js";
+import { getGitHubAppConfig, listInstallationRepositories } from "./shared/github.js";
 import {
   isAcceptedSentryLevel,
   normalizeSentrySignal,
@@ -88,6 +89,31 @@ app.get("/api/config/status", (c) => {
 
   return c.json({
     ...configStatus(resolveFactoryEnv(c.env)),
+  });
+});
+
+app.get("/api/github/repositories", async (c) => {
+  const authError = requireFactoryApiToken(c);
+  if (authError) {
+    return authError;
+  }
+
+  const repositories = await listInstallationRepositories(getGitHubAppConfig(resolveFactoryEnv(c.env)));
+  return c.json({
+    repositories: repositories.map((repo) => ({
+      fullName: repo.fullName,
+      private: repo.private,
+      defaultBranch: repo.defaultBranch,
+      language: repo.language,
+      writable: Boolean(repo.permissions?.push || repo.permissions?.maintain || repo.permissions?.admin),
+      permissions: {
+        admin: Boolean(repo.permissions?.admin),
+        maintain: Boolean(repo.permissions?.maintain),
+        push: Boolean(repo.permissions?.push),
+        triage: Boolean(repo.permissions?.triage),
+        pull: Boolean(repo.permissions?.pull),
+      },
+    })),
   });
 });
 
