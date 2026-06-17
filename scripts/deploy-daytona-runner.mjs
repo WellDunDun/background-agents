@@ -63,21 +63,25 @@ async function main() {
     ...(env.DAYTONA_TARGET ? { target: env.DAYTONA_TARGET } : {}),
   });
 
-  const sandbox = await getOrCreateSandbox(daytona, sandboxName, options.recreate, env);
-  await ensureStarted(sandbox);
-  await deploySourceArchive(sandbox, appDir);
-  await writeRunnerEnv(sandbox, appDir, runnerEnv);
-  await runOrThrow(sandbox, "npm ci", appDir, 900);
-  await runOrThrow(sandbox, "npm run build:node", appDir, 300);
-  await restartRunnerSession(sandbox, appDir, port);
+  const sandbox = await step("get or create Daytona sandbox", () =>
+    getOrCreateSandbox(daytona, sandboxName, options.recreate, env),
+  );
+  await step("ensure sandbox is started", () => ensureStarted(sandbox));
+  await step("upload committed source archive", () => deploySourceArchive(sandbox, appDir));
+  await step("write private runner environment", () => writeRunnerEnv(sandbox, appDir, runnerEnv));
+  await step("install runner dependencies", () => runOrThrow(sandbox, "npm ci", appDir, 900));
+  await step("build Node runner", () => runOrThrow(sandbox, "npm run build:node", appDir, 300));
+  await step("restart runner session", () => restartRunnerSession(sandbox, appDir, port));
 
-  const preview = await sandbox.getPreviewLink(port);
+  const preview = await step("create runner preview link", () => sandbox.getPreviewLink(port));
   const runnerUrl = normalizeUrl(preview.url);
-  await waitForHealth(runnerUrl);
+  await step("wait for runner health", () => waitForHealth(runnerUrl));
 
   if (options.configureWorker) {
-    await putWorkerSecret("FACTORY_RUNNER_URL", runnerUrl);
-    await putWorkerSecret("FACTORY_RUNNER_TOKEN", requireValue(env.FACTORY_RUNNER_TOKEN, "FACTORY_RUNNER_TOKEN"));
+    await step("configure Worker runner URL secret", () => putWorkerSecret("FACTORY_RUNNER_URL", runnerUrl));
+    await step("configure Worker runner token secret", () =>
+      putWorkerSecret("FACTORY_RUNNER_TOKEN", requireValue(env.FACTORY_RUNNER_TOKEN, "FACTORY_RUNNER_TOKEN")),
+    );
   }
 
   console.log(JSON.stringify(
@@ -91,6 +95,19 @@ async function main() {
     null,
     2,
   ));
+}
+
+async function step(label, fn) {
+  const startedAt = Date.now();
+  process.stderr.write("[runner-deploy] " + label + "...\n");
+  try {
+    const result = await fn();
+    process.stderr.write("[runner-deploy] " + label + " done in " + (Date.now() - startedAt) + "ms\n");
+    return result;
+  } catch (error) {
+    process.stderr.write("[runner-deploy] " + label + " failed after " + (Date.now() - startedAt) + "ms\n");
+    throw error;
+  }
 }
 
 function parseArgs(args) {
