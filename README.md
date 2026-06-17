@@ -75,6 +75,8 @@ GET /api/jobs/{instanceId}/events
 
 Send Authorization: Bearer <FACTORY_API_TOKEN>. The Worker uses FACTORY_RUNNER_TOKEN when it reads the runner's Flue stream.
 
+GET /api/jobs lists recent app-owned factory job admission records. GET /api/jobs/{instanceId} returns one record. In production these endpoints proxy to the Node runner ledger through FACTORY_RUNNER_TOKEN and rewrite streamUrl to the Worker event proxy.
+
 GET /api/config/status returns non-secret configuration readiness for the operator UI or deployment smoke tests. It also requires Authorization: Bearer <FACTORY_API_TOKEN>.
 
 GET /api/github/repositories returns the GitHub App installation repositories visible to the factory, including default branch and write-readiness flags for repo selection UIs. It requires Authorization: Bearer <FACTORY_API_TOKEN>. A repo-backed job needs a repository where writable=true; otherwise the agent can inspect but cannot push a factory branch or create the draft PR.
@@ -116,6 +118,8 @@ The runner script creates a Daytona sandbox from `node:22-bookworm` with 2 vCPU,
 By default the deployed Daytona runner sets FACTORY_WORKSPACE_PROVIDER=runner. That means the runner sandbox itself is the Flue local workspace boundary for jobs, with per-job directories under /tmp/signal-factory-jobs. This avoids a nested Daytona runner creating a second Daytona sandbox and then failing on provider proxy resets. For a non-Daytona Node host, unset FACTORY_WORKSPACE_PROVIDER to return to per-job Daytona workspaces.
 
 The Codex OAuth refresh token is rotating. The runner sets FACTORY_CODEX_CREDENTIALS_PATH=.runner.env so successful refreshes update the runner's private env file and in-memory process env before the old refresh token is reused.
+
+The runner also sets FACTORY_JOB_LEDGER_PATH=/home/daytona/signal-factory-runner-data/jobs.jsonl by default. This keeps non-secret job admission records outside the app deploy directory so runner redeploys do not wipe the sessions list.
 
 Required runner env values:
 

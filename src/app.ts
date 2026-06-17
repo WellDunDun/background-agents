@@ -11,8 +11,11 @@ import {
   admitFactoryJob,
   dispatchLocalFactoryJob,
   FactoryAdmissionError,
+  readFactoryJobList,
+  readFactoryJobRecord,
   proxyRunnerAgentEvents,
 } from "./shared/factory-admission.js";
+import { getFactoryJobRecord, listFactoryJobRecords } from "./shared/job-ledger.js";
 import { handleGitHubWebhook } from "./shared/github-webhook.js";
 import {
   requireFactoryApiToken,
@@ -55,6 +58,34 @@ app.post("/api/jobs", async (c) => {
   return admission instanceof Response ? admission : c.json(admission, 202);
 });
 
+app.get("/api/jobs", async (c) => {
+  const authError = requireFactoryApiToken(c);
+  if (authError) {
+    return authError;
+  }
+
+  const limit = parsePositiveInteger(c.req.query("limit"));
+  const list = await readFactoryJobList(resolveFactoryEnv(c.env), limit).catch((error: unknown) =>
+    factoryAdmissionErrorResponse(c, error),
+  );
+  return list instanceof Response ? list : c.json(list);
+});
+
+app.get("/api/jobs/:instanceId", async (c) => {
+  const authError = requireFactoryApiToken(c);
+  if (authError) {
+    return authError;
+  }
+
+  const record = await readFactoryJobRecord(resolveFactoryEnv(c.env), c.req.param("instanceId")).catch(
+    (error: unknown) => factoryAdmissionErrorResponse(c, error),
+  );
+  if (record instanceof Response) {
+    return record;
+  }
+  return record ? c.json(record) : c.json({ error: "Job not found." }, 404);
+});
+
 app.post("/api/runner/jobs", async (c) => {
   const authError = requireFactoryRunnerToken(c);
   if (authError) {
@@ -67,8 +98,27 @@ app.post("/api/runner/jobs", async (c) => {
     return c.json({ error: parsed.error }, 400);
   }
 
-  const admission = await dispatchLocalFactoryJob(parsed.value);
+  const admission = await dispatchLocalFactoryJob(parsed.value, resolveFactoryEnv(c.env));
   return c.json(admission, 202);
+});
+
+app.get("/api/runner/jobs", async (c) => {
+  const authError = requireFactoryRunnerToken(c);
+  if (authError) {
+    return authError;
+  }
+
+  return c.json(await listFactoryJobRecords(resolveFactoryEnv(c.env), { limit: parsePositiveInteger(c.req.query("limit")) }));
+});
+
+app.get("/api/runner/jobs/:instanceId", async (c) => {
+  const authError = requireFactoryRunnerToken(c);
+  if (authError) {
+    return authError;
+  }
+
+  const record = await getFactoryJobRecord(resolveFactoryEnv(c.env), c.req.param("instanceId"));
+  return record ? c.json(record) : c.json({ error: "Job not found." }, 404);
 });
 
 app.get("/api/jobs/:instanceId/events", async (c) => {
@@ -282,4 +332,12 @@ function toAdmissionStatus(status: number): 400 | 401 | 403 | 404 | 408 | 409 | 
     default:
       return 502;
   }
+}
+
+function parsePositiveInteger(value: string | undefined): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }

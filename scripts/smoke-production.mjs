@@ -36,6 +36,8 @@ async function main() {
     ? { skipped: true }
     : await runNoRepoAgentSmoke(workerUrl, apiToken, options.timeoutMs || DEFAULT_TIMEOUT_MS);
 
+  const jobLedger = await readJobLedgerSmoke(workerUrl, apiToken, agentSmoke);
+
   const readOnlyGuard = await runReadOnlyGuardSmoke(workerUrl, apiToken, repoList);
 
   console.log(
@@ -55,12 +57,40 @@ async function main() {
           })),
         },
         agentSmoke,
+        jobLedger,
         readOnlyGuard,
       },
       null,
       2,
     ),
   );
+}
+
+async function readJobLedgerSmoke(workerUrl, apiToken, agentSmoke) {
+  const list = await readJson(workerUrl + "/api/jobs?limit=10", {
+    headers: authHeaders(apiToken),
+  });
+  assertStatus("job list", list.status, 200);
+
+  const jobs = Array.isArray(list.body.jobs) ? list.body.jobs : [];
+  const targetInstanceId = agentSmoke && !agentSmoke.skipped ? agentSmoke.instanceId : undefined;
+  const listedSmokeJob = targetInstanceId
+    ? jobs.some((job) => job && job.instanceId === targetInstanceId)
+    : undefined;
+  let detail;
+
+  if (targetInstanceId) {
+    detail = await readJson(workerUrl + "/api/jobs/" + encodeURIComponent(targetInstanceId), {
+      headers: authHeaders(apiToken),
+    });
+    assertStatus("job detail", detail.status, 200);
+  }
+
+  return {
+    count: jobs.length,
+    listedSmokeJob,
+    detailStatus: detail?.status,
+  };
 }
 
 function parseArgs(args) {

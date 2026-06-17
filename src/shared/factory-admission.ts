@@ -9,6 +9,14 @@ import {
   getInstallationRepository,
   parseRepositorySlug,
 } from "./github.js";
+import {
+  getFactoryJobRecord,
+  listFactoryJobRecords,
+  recordFactoryJobAccepted,
+  recordFactoryJobSubmitted,
+  type FactoryJobList,
+  type FactoryJobRecord,
+} from "./job-ledger.js";
 
 const DEFAULT_RUNNER_REQUEST_TIMEOUT_MS = 30000;
 
@@ -45,7 +53,7 @@ export async function admitFactoryJob(
     return forwardFactoryJobToRunner(runtimeEnv, runnerUrl, input);
   }
 
-  return dispatchLocalFactoryJob(input);
+  return dispatchLocalFactoryJob(input, runtimeEnv);
 }
 
 async function assertWritableRepositoryAccess(env: FactoryEnv, input: FactoryJobInput): Promise<void> {
@@ -70,13 +78,20 @@ async function assertWritableRepositoryAccess(env: FactoryEnv, input: FactoryJob
   }
 }
 
-export async function dispatchLocalFactoryJob(input: FactoryJobInput): Promise<FactoryAdmissionReceipt> {
+export async function dispatchLocalFactoryJob(
+  input: FactoryJobInput,
+  env?: FactoryEnv,
+): Promise<FactoryAdmissionReceipt> {
+  if (env) {
+    await recordFactoryJobSubmitted(env, input);
+  }
+
   const receipt = await dispatch(orchestrator, {
     id: input.jobId,
     input,
   });
 
-  return {
+  const admission: FactoryAdmissionReceipt = {
     ok: true,
     jobId: input.jobId,
     agent: "orchestrator",
@@ -86,6 +101,69 @@ export async function dispatchLocalFactoryJob(input: FactoryJobInput): Promise<F
     streamUrl: "/agents/orchestrator/" + encodeURIComponent(input.jobId),
     executionTarget: "local",
   };
+
+  if (env) {
+    await recordFactoryJobAccepted(env, input, admission).catch(() => undefined);
+  }
+
+  return admission;
+}
+
+export async function readFactoryJobList(env: FactoryEnv, limit?: number): Promise<FactoryJobList> {
+  const runtimeEnv = resolveFactoryEnv(env);
+  const runnerUrl = normalizeRunnerUrl(runtimeEnv.FACTORY_RUNNER_URL);
+  if (!runnerUrl) {
+    return listFactoryJobRecords(runtimeEnv, { limit });
+  }
+
+  const runnerToken = requireRunnerToken(runtimeEnv);
+  const url = new URL(runnerUrl + "/api/runner/jobs");
+  if (limit !== undefined) {
+    url.searchParams.set("limit", String(limit));
+  }
+
+  const response = await fetch(url, {
+    headers: { Authorization: "Bearer " + runnerToken },
+    signal: AbortSignal.timeout(numberFromEnv(runtimeEnv.FACTORY_RUNNER_REQUEST_TIMEOUT_MS) ?? DEFAULT_RUNNER_REQUEST_TIMEOUT_MS),
+  });
+  const body = await parseJsonResponse(response);
+  if (!response.ok) {
+    throw new FactoryAdmissionError(
+      "Factory runner rejected job list request: " + response.status + " " + describeRunnerError(body),
+      response.status >= 500 ? 502 : response.status,
+    );
+  }
+
+  return normalizeRunnerJobList(body);
+}
+
+export async function readFactoryJobRecord(
+  env: FactoryEnv,
+  instanceId: string,
+): Promise<FactoryJobRecord | null> {
+  const runtimeEnv = resolveFactoryEnv(env);
+  const runnerUrl = normalizeRunnerUrl(runtimeEnv.FACTORY_RUNNER_URL);
+  if (!runnerUrl) {
+    return getFactoryJobRecord(runtimeEnv, instanceId);
+  }
+
+  const runnerToken = requireRunnerToken(runtimeEnv);
+  const response = await fetch(runnerUrl + "/api/runner/jobs/" + encodeURIComponent(instanceId), {
+    headers: { Authorization: "Bearer " + runnerToken },
+    signal: AbortSignal.timeout(numberFromEnv(runtimeEnv.FACTORY_RUNNER_REQUEST_TIMEOUT_MS) ?? DEFAULT_RUNNER_REQUEST_TIMEOUT_MS),
+  });
+  const body = await parseJsonResponse(response);
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new FactoryAdmissionError(
+      "Factory runner rejected job detail request: " + response.status + " " + describeRunnerError(body),
+      response.status >= 500 ? 502 : response.status,
+    );
+  }
+
+  return normalizeRunnerJobRecord(body);
 }
 
 export async function proxyRunnerAgentEvents(
@@ -203,6 +281,29 @@ function parseRunnerReceipt(value: unknown): Omit<FactoryAdmissionReceipt, "exec
     dispatchId: value.dispatchId,
     acceptedAt: value.acceptedAt,
     streamUrl: value.streamUrl,
+  };
+}
+
+function normalizeRunnerJobList(value: unknown): FactoryJobList {
+  if (!isRecord(value) || !Array.isArray(value.jobs)) {
+    throw new FactoryAdmissionError("Factory runner returned an invalid job list.");
+  }
+
+  return {
+    jobs: value.jobs.map((job) => normalizeRunnerJobRecord(job)),
+  };
+}
+
+function normalizeRunnerJobRecord(value: unknown): FactoryJobRecord {
+  if (!isRecord(value) || typeof value.instanceId !== "string") {
+    throw new FactoryAdmissionError("Factory runner returned an invalid job record.");
+  }
+
+  const record = value as unknown as FactoryJobRecord;
+  return {
+    ...record,
+    executionTarget: "runner",
+    streamUrl: "/api/jobs/" + encodeURIComponent(record.instanceId) + "/events",
   };
 }
 
