@@ -100,7 +100,13 @@ Admission guard proof:
 - A repo-backed `POST /api/jobs` against the known read-only repository `WellDunDun/canary-compact` returned 403 before runner dispatch.
 - The 403 response explains that the GitHub App installation has no write access and must be updated before repo-backed jobs can create branches or draft PRs.
 
+Sentry routing proof:
+
+- Worker deploy succeeded after Sentry route-map support: version `8ee8dcd8-0d18-443d-b2bd-b47ffc25237c`.
+- `GET /api/config/status` reports `sentry.webhookConfigured=true`, `sentry.repoMapConfigured=false`, and `sentry.defaultRepo=null`.
+- A signed synthetic webhook could not be sent from this machine because local `.dev.vars` does not currently include `SENTRY_WEBHOOK_SECRET`. Production does have the secret configured, so an end-to-end Sentry delivery test should be run from Sentry or from a local environment that has the matching webhook secret.
+
 Remaining product setup:
 
 - Update the GitHub App installation so at least one target repository has write access. Then run the repo-backed production proof that creates a draft PR and stops before merge.
-- Sentry is not fully actionable until `SENTRY_DEFAULT_REPO` or a per-project routing table is configured.
+- Set `SENTRY_REPO_MAP` or `SENTRY_DEFAULT_REPO`, then run a real or signed synthetic Sentry webhook proof.
