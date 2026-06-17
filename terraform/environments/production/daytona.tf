@@ -3,19 +3,19 @@
 # =============================================================================
 
 # Calculate hash of Daytona snapshot source files for change detection.
-# Includes daytona-infra (image definition) and sandbox-runtime (copied into image).
+# Includes daytona-infra, sandbox-runtime, and flue-runtime copied into the image.
 data "external" "daytona_source_hash" {
   count = local.use_daytona_backend ? 1 : 0
 
   program = ["bash", "-c", <<-EOF
     cd ${var.project_root}
     if command -v sha256sum &> /dev/null; then
-      hash=$(find packages/daytona-infra/src packages/sandbox-runtime/src \
-        -type f \( -name "*.py" -o -name "*.js" -o -name "*.ts" \) \
+      hash=$(find packages/daytona-infra/src packages/sandbox-runtime/src packages/flue-runtime/src packages/flue-runtime/flue.config.ts packages/flue-runtime/package.json packages/flue-runtime/package-lock.json \
+        -type f \( -name "*.py" -o -name "*.js" -o -name "*.ts" -o -name "package.json" -o -name "package-lock.json" \) \
         -exec sha256sum {} \; | sort | sha256sum | cut -d' ' -f1)
     else
-      hash=$(find packages/daytona-infra/src packages/sandbox-runtime/src \
-        -type f \( -name "*.py" -o -name "*.js" -o -name "*.ts" \) \
+      hash=$(find packages/daytona-infra/src packages/sandbox-runtime/src packages/flue-runtime/src packages/flue-runtime/flue.config.ts packages/flue-runtime/package.json packages/flue-runtime/package-lock.json \
+        -type f \( -name "*.py" -o -name "*.js" -o -name "*.ts" -o -name "package.json" -o -name "package-lock.json" \) \
         -exec shasum -a 256 {} \; | sort | shasum -a 256 | cut -d' ' -f1)
     fi
     echo "{\"hash\": \"$hash\"}"

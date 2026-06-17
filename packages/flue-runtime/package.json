@@ -1,0 +1,30 @@
+{
+  "name": "@open-inspect/flue-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "open-inspect-flue-bridge": "./dist/bridge.js"
+  },
+  "scripts": {
+    "build": "npm run build:types && flue build --target node",
+    "build:types": "tsc -p tsconfig.json",
+    "flue:dev": "flue dev --target node",
+    "start": "node dist/server.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run test"
+  },
+  "dependencies": {
+    "@flue/runtime": "1.0.0-beta.1",
+    "hono": "4.12.23",
+    "ws": "8.18.0"
+  },
+  "devDependencies": {
+    "@flue/cli": "1.0.0-beta.1",
+    "@types/ws": "^8.5.13",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}

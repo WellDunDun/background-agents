@@ -17,8 +17,12 @@ import modal
 
 import sandbox_runtime
 
+# Get the repo root so shared runtime packages can be baked into the sandbox image.
+REPO_ROOT = Path(__file__).resolve().parents[4]
+
 # Get the path to the sandbox runtime code (provider-agnostic)
 SANDBOX_RUNTIME_DIR = Path(sandbox_runtime.__file__).parent
+FLUE_RUNTIME_DIR = REPO_ROOT / "packages" / "flue-runtime"
 
 # OpenCode version to install.
 #
@@ -46,8 +50,8 @@ TTYD_VERSION = "1.7.7"
 TTYD_SHA256 = "8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55"
 
 # Cache buster - change this to force Modal image rebuild
-# v51: SCM credential helper backed by control plane; remove embedded VCS tokens
-CACHE_BUSTER = "v51-scm-credential-helper"
+# v52: bake the Flue runtime into sandbox images.
+CACHE_BUSTER = "v52-flue-runtime"
 
 # Base image with all development tools
 base_image = (
@@ -140,6 +144,16 @@ base_image = (
         f'"dependencies":{{"@opencode-ai/plugin":"{OPENCODE_VERSION}"}}}}\''
         " > /app/opencode-deps/package.json",
         "cd /app/opencode-deps && npm install --ignore-scripts --no-audit --no-fund",
+    )
+    # Build the Flue runtime into the image for AGENT_RUNTIME=flue sessions.
+    .add_local_dir(
+        str(FLUE_RUNTIME_DIR),
+        remote_path="/app/flue-runtime",
+    )
+    .run_commands(
+        "cd /app/flue-runtime && npm ci --ignore-scripts --no-audit --no-fund",
+        "cd /app/flue-runtime && npm run build",
+        "cd /app/flue-runtime && npm prune --omit=dev --ignore-scripts --no-audit --no-fund",
     )
     # Install code-server for browser-based VS Code editing (direct .deb from GitHub releases)
     .run_commands(

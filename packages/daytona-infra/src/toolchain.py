@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import time
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from daytona import CreateSnapshotParams, Daytona, Image
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # OpenCode version to install.
 #
@@ -24,9 +27,8 @@ OPENCODE_VERSION = "1.14.41"
 CODE_SERVER_VERSION = "4.109.5"
 AGENT_BROWSER_VERSION = "0.21.2"
 # Bump when changing image contents to invalidate the Daytona snapshot.
-# daytona-v2: install the SCM credential-helper shim and configure
-# git system-wide so per-request token brokerage matches the Modal base image.
-SANDBOX_VERSION = "daytona-v2-credential-helper"
+# daytona-v3: bake the Flue runtime into sandbox images.
+SANDBOX_VERSION = "daytona-v3-flue-runtime"
 SANDBOX_ENTRYPOINT = ["/bin/sh", "-lc", "exec python3 -m sandbox_runtime.entrypoint"]
 SNAPSHOT_DELETE_TIMEOUT_SECONDS = 180
 SNAPSHOT_READY_TIMEOUT_SECONDS = 300
@@ -37,6 +39,7 @@ def build_base_image(repo_root: Path) -> Image:
     sandbox_runtime_dir = (
         repo_root / "packages" / "sandbox-runtime" / "src" / "sandbox_runtime"
     )
+    flue_runtime_dir = repo_root / "packages" / "flue-runtime"
 
     return (
         # Build on Daytona's stock sandbox image so custom snapshots stay
@@ -94,6 +97,12 @@ def build_base_image(repo_root: Path) -> Image:
             # Pass the repo path to the helper so it can scope credentials to
             # the session repo, not just the host.
             "git config --system credential.useHttpPath true",
+        )
+        .add_local_dir(str(flue_runtime_dir), "/app/flue-runtime")
+        .run_commands(
+            "cd /app/flue-runtime && npm ci --ignore-scripts --no-audit --no-fund",
+            "cd /app/flue-runtime && npm run build",
+            "cd /app/flue-runtime && npm prune --omit=dev --ignore-scripts --no-audit --no-fund",
         )
         .env(
             {
@@ -168,7 +177,7 @@ def create_base_snapshot(daytona: Daytona, repo_root: Path, snapshot_name: str) 
     daytona.snapshot.create(
         CreateSnapshotParams(
             name=snapshot_name,
-            image=getattr(built_snapshot, "ref"),
+            image=built_snapshot.ref,
             entrypoint=SANDBOX_ENTRYPOINT,
         )
     )

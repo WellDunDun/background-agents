@@ -4,16 +4,16 @@
 
 # Calculate hash of Modal source files for change detection
 # Uses sha256sum (Linux) or shasum (macOS) for cross-platform compatibility
-# Includes .py, .js, and .ts files (sandbox plugins and tools)
+# Includes Modal infra, sandbox-runtime, and flue-runtime files copied into the image.
 data "external" "modal_source_hash" {
   count = local.use_modal_backend ? 1 : 0
 
   program = ["bash", "-c", <<-EOF
     cd ${var.project_root}
     if command -v sha256sum &> /dev/null; then
-      hash=$(find packages/modal-infra/src packages/sandbox-runtime/src -type f \( -name "*.py" -o -name "*.js" -o -name "*.ts" \) -exec sha256sum {} \; | sha256sum | cut -d' ' -f1)
+      hash=$(find packages/modal-infra/src packages/sandbox-runtime/src packages/flue-runtime/src packages/flue-runtime/flue.config.ts packages/flue-runtime/package.json packages/flue-runtime/package-lock.json -type f \( -name "*.py" -o -name "*.js" -o -name "*.ts" -o -name "package.json" -o -name "package-lock.json" \) -exec sha256sum {} \; | sort | sha256sum | cut -d' ' -f1)
     else
-      hash=$(find packages/modal-infra/src packages/sandbox-runtime/src -type f \( -name "*.py" -o -name "*.js" -o -name "*.ts" \) -exec shasum -a 256 {} \; | shasum -a 256 | cut -d' ' -f1)
+      hash=$(find packages/modal-infra/src packages/sandbox-runtime/src packages/flue-runtime/src packages/flue-runtime/flue.config.ts packages/flue-runtime/package.json packages/flue-runtime/package-lock.json -type f \( -name "*.py" -o -name "*.js" -o -name "*.ts" -o -name "package.json" -o -name "package-lock.json" \) -exec shasum -a 256 {} \; | sort | shasum -a 256 | cut -d' ' -f1)
     fi
     echo "{\"hash\": \"$hash\"}"
   EOF

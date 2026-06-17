@@ -98,6 +98,7 @@ class SandboxSupervisor:
 
     # Configuration
     OPENCODE_PORT = 4096
+    FLUE_PORT = 3000
     HEALTH_CHECK_TIMEOUT = 30.0
     MAX_RESTARTS = 5
     BACKOFF_BASE = 2.0
@@ -130,6 +131,7 @@ class SandboxSupervisor:
         self.repo_owner = os.environ.get("REPO_OWNER", "")
         self.repo_name = os.environ.get("REPO_NAME", "")
         self.vcs_host = os.environ.get("VCS_HOST", "github.com")
+        self.agent_runtime = os.environ.get("AGENT_RUNTIME", "opencode").strip().lower()
         # Note: VCS credentials are no longer captured at sandbox start. Git
         # operations authenticate per-call via the system-wide credential
         # helper (`/usr/local/bin/oi-git-credentials`), which fetches fresh
@@ -914,6 +916,54 @@ class SandboxSupervisor:
         self.opencode_ready.set()
         self.log.info("opencode.ready")
 
+    async def start_flue(self) -> None:
+        """Start Flue's generated Node server with the repo checkout as its workspace."""
+        self.log.info("flue.start")
+
+        workdir = self.workspace_path
+        if self.repo_path.exists() and (self.repo_path / ".git").exists():
+            workdir = self.repo_path
+
+        self._install_tools(workdir)
+        self._install_skills(workdir)
+        self._install_bin_scripts()
+
+        runtime_dir = Path(os.environ.get("FLUE_RUNTIME_DIR", "/app/flue-runtime"))
+        server_path = runtime_dir / "dist" / "server.mjs"
+        if not server_path.exists():
+            raise RuntimeError(f"Flue server not found at {server_path}")
+
+        env = {
+            **os.environ,
+            "PORT": str(self.FLUE_PORT),
+            "FLUE_SERVER_PORT": str(self.FLUE_PORT),
+        }
+
+        self.opencode_process = await asyncio.create_subprocess_exec(
+            "node",
+            str(server_path),
+            cwd=runtime_dir,
+            env=env,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+
+        asyncio.create_task(self._forward_flue_logs())
+        await self._wait_for_health()
+        self.opencode_ready.set()
+        self.log.info("flue.ready")
+
+    async def start_agent_runtime(self) -> None:
+        """Start the configured agent runtime."""
+        if self.agent_runtime == "flue":
+            await self.start_flue()
+            return
+
+        if self.agent_runtime != "opencode":
+            raise RuntimeError(f"Unsupported AGENT_RUNTIME: {self.agent_runtime}")
+
+        await self.start_opencode()
+
     async def _forward_opencode_logs(self) -> None:
         """Forward OpenCode stdout to supervisor stdout."""
         if not self.opencode_process or not self.opencode_process.stdout:
@@ -925,9 +975,25 @@ class SandboxSupervisor:
         except Exception as e:
             print(f"[supervisor] Log forwarding error: {e}")
 
+    async def _forward_flue_logs(self) -> None:
+        """Forward Flue stdout to supervisor stdout."""
+        if not self.opencode_process or not self.opencode_process.stdout:
+            return
+
+        try:
+            async for line in self.opencode_process.stdout:
+                print(f"[flue] {line.decode().rstrip()}")
+        except Exception as e:
+            print(f"[supervisor] Flue log forwarding error: {e}")
+
     async def _wait_for_health(self) -> None:
         """Poll health endpoint until server is ready."""
-        health_url = f"http://localhost:{self.OPENCODE_PORT}/global/health"
+        if self.agent_runtime == "flue":
+            health_url = f"http://localhost:{self.FLUE_PORT}/health"
+            service_name = "Flue"
+        else:
+            health_url = f"http://localhost:{self.OPENCODE_PORT}/global/health"
+            service_name = "OpenCode"
         start_time = time.time()
 
         async with httpx.AsyncClient() as client:
@@ -942,11 +1008,11 @@ class SandboxSupervisor:
                 except httpx.ConnectError:
                     pass
                 except Exception as e:
-                    self.log.debug("opencode.health_check_error", exc=e)
+                    self.log.debug("agent_runtime.health_check_error", exc=e)
 
                 await asyncio.sleep(0.5)
 
-        raise RuntimeError("OpenCode server failed to become healthy")
+        raise RuntimeError(f"{service_name} server failed to become healthy")
 
     async def start_bridge(self) -> None:
         """Start the agent bridge process."""
@@ -965,22 +1031,38 @@ class SandboxSupervisor:
             self.log.info("bridge.skip", reason="no_session_id")
             return
 
-        # Run bridge as a module (works with relative imports)
+        if self.agent_runtime == "flue":
+            runtime_dir = Path(os.environ.get("FLUE_RUNTIME_DIR", "/app/flue-runtime"))
+            bridge_path = runtime_dir / "dist" / "bridge.js"
+            if not bridge_path.exists():
+                raise RuntimeError(f"Flue bridge not found at {bridge_path}")
+            bridge_cmd = ["node", str(bridge_path)]
+            bridge_env = {
+                **os.environ,
+                "FLUE_SERVER_URL": f"http://127.0.0.1:{self.FLUE_PORT}",
+            }
+        else:
+            # Run bridge as a module (works with relative imports)
+            bridge_cmd = [
+                "python",
+                "-m",
+                "sandbox_runtime.bridge",
+                "--sandbox-id",
+                self.sandbox_id,
+                "--session-id",
+                session_id,
+                "--control-plane",
+                self.control_plane_url,
+                "--token",
+                self.sandbox_token,
+                "--opencode-port",
+                str(self.OPENCODE_PORT),
+            ]
+            bridge_env = os.environ.copy()
+
         self.bridge_process = await asyncio.create_subprocess_exec(
-            "python",
-            "-m",
-            "sandbox_runtime.bridge",
-            "--sandbox-id",
-            self.sandbox_id,
-            "--session-id",
-            session_id,
-            "--control-plane",
-            self.control_plane_url,
-            "--token",
-            self.sandbox_token,
-            "--opencode-port",
-            str(self.OPENCODE_PORT),
-            env=os.environ,
+            *bridge_cmd,
+            env=bridge_env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
         )
@@ -1031,18 +1113,20 @@ class SandboxSupervisor:
                 restart_count += 1
 
                 self.log.error(
-                    "opencode.crash",
+                    "agent_runtime.crash",
                     exit_code=exit_code,
                     restart_count=restart_count,
+                    agent_runtime=self.agent_runtime,
                 )
 
                 if restart_count > self.MAX_RESTARTS:
                     self.log.error(
-                        "opencode.max_restarts",
+                        "agent_runtime.max_restarts",
                         restart_count=restart_count,
+                        agent_runtime=self.agent_runtime,
                     )
                     await self._report_fatal_error(
-                        f"OpenCode crashed {restart_count} times, giving up"
+                        f"{self.agent_runtime} crashed {restart_count} times, giving up"
                     )
                     self.shutdown_event.set()
                     break
@@ -1050,14 +1134,15 @@ class SandboxSupervisor:
                 # Exponential backoff
                 delay = min(self.BACKOFF_BASE**restart_count, self.BACKOFF_MAX)
                 self.log.info(
-                    "opencode.restart",
+                    "agent_runtime.restart",
                     delay_s=round(delay, 1),
                     restart_count=restart_count,
+                    agent_runtime=self.agent_runtime,
                 )
 
                 await asyncio.sleep(delay)
                 self.opencode_ready.clear()
-                await self.start_opencode()
+                await self.start_agent_runtime()
 
             # Check bridge process
             if self.bridge_process and self.bridge_process.returncode is not None:
@@ -1530,8 +1615,9 @@ class SandboxSupervisor:
                     except Exception as e:
                         self.log.warn("ttyd_proxy.start_failed", exc=e)
 
-            # Phase 4: Start OpenCode server (in repo directory)
-            await self.start_opencode()
+            # Phase 4: Start agent runtime server (in repo directory for OpenCode,
+            # package directory for Flue with absolute cwd pointed at the checkout).
+            await self.start_agent_runtime()
             opencode_ready = True
 
             # Phase 5: Start bridge (after OpenCode is ready)
