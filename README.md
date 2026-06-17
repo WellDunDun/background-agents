@@ -26,12 +26,15 @@ This branch intentionally starts clean instead of retrofitting the old backgroun
 - npm run dev:node
 - npm run deploy:dry-run
 - npm run deploy
+- npm run smoke:production
 
 Cloudflare development uses .dev.vars; production secrets should be set through Wrangler secrets or the deployment platform, not committed files.
 
 Flue builds the deployable Cloudflare Worker into dist/flue_factory. The deploy scripts run flue build first, then pass the generated Wrangler config in that output directory to Wrangler.
 
 Flue builds the Node runner into dist-node. Start it with npm run start:node after supplying runtime environment variables.
+
+Run npm run smoke:production after a deploy to verify the live Worker health route, protected config status, GitHub repository readiness endpoint, read-only repository guard when applicable, and a non-repository Codex-backed live agent stream. The smoke script reads secrets from .dev.vars or the process environment and does not print token values.
 
 ## Configuration
 
