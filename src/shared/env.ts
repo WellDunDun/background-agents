@@ -1,4 +1,5 @@
 export interface FactoryEnv {
+  FACTORY_API_TOKEN?: string;
   FACTORY_DEFAULT_MODEL?: string;
   OPENAI_API_KEY?: string;
   DAYTONA_API_KEY?: string;
@@ -16,6 +17,8 @@ export interface FactoryEnv {
   GITHUB_APP_PRIVATE_KEY?: string;
   GITHUB_APP_INSTALLATION_ID?: string;
   GITHUB_WEBHOOK_SECRET?: string;
+  GITHUB_BOT_USERNAME?: string;
+  FACTORY_GITHUB_TRIGGER_PHRASE?: string;
   SENTRY_WEBHOOK_SECRET?: string;
 }
 
