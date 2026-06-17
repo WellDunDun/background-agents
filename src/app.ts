@@ -19,7 +19,7 @@ import {
   requireFactoryRunnerToken,
   requireFactoryTransportToken,
 } from "./shared/http-auth.js";
-import { getGitHubAppConfig, listInstallationRepositories } from "./shared/github.js";
+import { canWriteRepository, getGitHubAppConfig, listInstallationRepositories } from "./shared/github.js";
 import {
   isAcceptedSentryLevel,
   normalizeSentrySignal,
@@ -105,7 +105,7 @@ app.get("/api/github/repositories", async (c) => {
       private: repo.private,
       defaultBranch: repo.defaultBranch,
       language: repo.language,
-      writable: Boolean(repo.permissions?.push || repo.permissions?.maintain || repo.permissions?.admin),
+      writable: canWriteRepository(repo),
       permissions: {
         admin: Boolean(repo.permissions?.admin),
         maintain: Boolean(repo.permissions?.maintain),

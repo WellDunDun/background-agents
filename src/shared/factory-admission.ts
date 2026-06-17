@@ -3,6 +3,12 @@ import { dispatch } from "@flue/runtime";
 import orchestrator from "../agents/orchestrator.js";
 import { resolveFactoryEnv, type FactoryEnv } from "./env.js";
 import type { FactoryJobInput } from "./factory-types.js";
+import {
+  canWriteRepository,
+  getGitHubAppConfig,
+  getInstallationRepository,
+  parseRepositorySlug,
+} from "./github.js";
 
 const DEFAULT_RUNNER_REQUEST_TIMEOUT_MS = 30000;
 
@@ -32,12 +38,36 @@ export async function admitFactoryJob(
   input: FactoryJobInput,
 ): Promise<FactoryAdmissionReceipt> {
   const runtimeEnv = resolveFactoryEnv(env);
+  await assertWritableRepositoryAccess(runtimeEnv, input);
+
   const runnerUrl = normalizeRunnerUrl(runtimeEnv.FACTORY_RUNNER_URL);
   if (runnerUrl) {
     return forwardFactoryJobToRunner(runtimeEnv, runnerUrl, input);
   }
 
   return dispatchLocalFactoryJob(input);
+}
+
+async function assertWritableRepositoryAccess(env: FactoryEnv, input: FactoryJobInput): Promise<void> {
+  if (!input.repo) {
+    return;
+  }
+
+  const parsed = parseRepositorySlug(input.repo);
+  const repository = await getInstallationRepository(getGitHubAppConfig(env), parsed.owner, parsed.name);
+  if (!repository) {
+    throw new FactoryAdmissionError(
+      "GitHub App installation cannot access " + input.repo + ". Update the installation repository selection.",
+      403,
+    );
+  }
+
+  if (!canWriteRepository(repository)) {
+    throw new FactoryAdmissionError(
+      "GitHub App installation has no write access to " + input.repo + ". Grant Contents/Pull requests write access and reinstall or update the app installation before starting repo-backed jobs.",
+      403,
+    );
+  }
 }
 
 export async function dispatchLocalFactoryJob(input: FactoryJobInput): Promise<FactoryAdmissionReceipt> {

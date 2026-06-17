@@ -37,6 +37,14 @@ export interface GitHubRepositoryPermissions {
   pull?: boolean;
 }
 
+export function canWriteRepository(repository: Pick<InstallationRepository, "permissions">): boolean {
+  return Boolean(
+    repository.permissions?.admin ||
+      repository.permissions?.maintain ||
+      repository.permissions?.push,
+  );
+}
+
 export interface PullRequestResult {
   number: number;
   webUrl: string;
