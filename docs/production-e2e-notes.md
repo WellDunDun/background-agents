@@ -141,6 +141,15 @@ Review-context tooling proof:
 - The agent smoke still reached `openai-codex/gpt-5.5`, completed with `agent_end`, returned `duplicateReused=true` on the retry-safe admission check, listed the smoke job through the ledger, and rejected the known read-only repo with 403.
 - Repo-backed use of `github_get_review_context` still requires a writable GitHub App repository because the tool operates on a prepared checkout and target branch before draft PR creation.
 
+Automation controls proof:
+
+- Worker deploy succeeded after adding GitHub/Sentry automation controls: version `338b07ad-a777-4363-ade2-17009c13b42e`.
+- Daytona runner deploy succeeded with `FACTORY_AUTOMATION_STATE_PATH=/home/daytona/signal-factory-runner-data/automations.json` and refreshed the Worker's runner URL/token secrets.
+- `npm run smoke:production` passed after deployment.
+- The smoke listed two automation sources, paused Sentry through `PATCH /api/automations/sentry`, restored it through the same Worker route, and confirmed both updates returned 200.
+- The same smoke still reached `openai-codex/gpt-5.5`, completed with `agent_end`, returned `duplicateReused=true` on the retry-safe admission check, listed the smoke job through the ledger, and rejected the known read-only repo with 403.
+- GitHub and Sentry webhook paths now acknowledge paused automations with `skipped=true` and do not dispatch long-running agent work.
+
 Remaining product setup:
 
 - Update the GitHub App installation so at least one target repository has write access. Then run the repo-backed production proof that creates a draft PR and stops before merge.
