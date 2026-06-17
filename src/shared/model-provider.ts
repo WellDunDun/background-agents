@@ -27,18 +27,14 @@ export async function registerFactoryModelProvider(env: FactoryEnv): Promise<voi
 }
 
 async function resolveOpenAICodexAccessToken(env: FactoryEnv): Promise<string | undefined> {
-  const accessToken = env.OPENAI_CODEX_ACCESS_TOKEN?.trim();
-  if (accessToken) {
-    return accessToken;
-  }
-
   const refreshToken = env.OPENAI_CODEX_REFRESH_TOKEN?.trim();
-  if (!refreshToken) {
-    return undefined;
+  if (refreshToken) {
+    const refreshed = await refreshOpenAICodexToken(refreshToken);
+    return refreshed.access;
   }
 
-  const refreshed = await refreshOpenAICodexToken(refreshToken);
-  return refreshed.access;
+  const accessToken = env.OPENAI_CODEX_ACCESS_TOKEN?.trim();
+  return accessToken || undefined;
 }
 
 function registerOpenAICodexSseApi(): void {
