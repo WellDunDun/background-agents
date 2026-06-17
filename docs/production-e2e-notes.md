@@ -115,6 +115,15 @@ Job ledger proof:
 - `GET /api/jobs?limit=10` returned the newly admitted smoke job, and `GET /api/jobs/{instanceId}` returned 200 for the same job.
 - The read-only repository guard still rejected `WellDunDun/canary-compact` with 403 before runner dispatch because the GitHub App installation lacks write access.
 
+Readiness proof:
+
+- Worker deploy succeeded after the production readiness slice: version `81076617-4eef-489a-a7ea-14be79997adb`.
+- Daytona runner deploy succeeded and refreshed the Worker's runner URL/token secrets.
+- `npm run smoke:production` passed against the live Worker and runner with the new `GET /api/readiness` check.
+- `GET /api/readiness` returned `state=blocked` with exactly one blocker, `worker:github-repositories`, because the GitHub App installation still has no writable repositories.
+- `GET /api/readiness` returned exactly one warning, `worker:sentry-route`, because Sentry is signed/configured but still has no `SENTRY_REPO_MAP` or `SENTRY_DEFAULT_REPO`.
+- The same smoke still admitted a no-repository runner job, streamed 31 events from `openai-codex/gpt-5.5`, saw `agent_end`, saw no provider/auth error, listed the new job through the app-owned ledger, and rejected the known read-only repo with 403.
+
 Remaining product setup:
 
 - Update the GitHub App installation so at least one target repository has write access. Then run the repo-backed production proof that creates a draft PR and stops before merge.
