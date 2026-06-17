@@ -133,6 +133,14 @@ Idempotency proof:
 - The duplicate admission returned 202 with `duplicateReused=true` and the same `manual:smoke-...` instance id instead of starting a second agent run.
 - The same smoke still reached `openai-codex/gpt-5.5`, saw no provider/auth error, listed the smoke job through the app-owned ledger, and rejected the known read-only repo with 403.
 
+Review-context tooling proof:
+
+- Worker deploy succeeded after adding `github_get_review_context`: version `7ae6919f-cb9e-4496-a30f-48e3b48a1fcf`.
+- Daytona runner deploy succeeded with the same toolset and refreshed the Worker's runner URL/token secrets.
+- `npm run smoke:production` passed after deployment.
+- The agent smoke still reached `openai-codex/gpt-5.5`, completed with `agent_end`, returned `duplicateReused=true` on the retry-safe admission check, listed the smoke job through the ledger, and rejected the known read-only repo with 403.
+- Repo-backed use of `github_get_review_context` still requires a writable GitHub App repository because the tool operates on a prepared checkout and target branch before draft PR creation.
+
 Remaining product setup:
 
 - Update the GitHub App installation so at least one target repository has write access. Then run the repo-backed production proof that creates a draft PR and stops before merge.
