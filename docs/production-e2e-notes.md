@@ -59,4 +59,6 @@ The codebase now supports this split:
 
 The next production proof requires hosting the Node runner, setting FACTORY_RUNNER_URL on the Worker, then rerunning the no-repo smoke job. A passing run should show model output instead of a chatgpt.com Cloudflare block page.
 
+Daytona runner deployment is scripted with npm run runner:deploy:daytona. The script creates or reuses a public Daytona sandbox named signal-factory-runner, uploads the committed source archive, writes runner secrets to .runner.env inside the sandbox, builds dist-node, starts npm run start:node as a Daytona background session, and returns the public preview URL. The Worker should store that URL in FACTORY_RUNNER_URL and the shared token in FACTORY_RUNNER_TOKEN.
+
 Sentry is not fully actionable until `SENTRY_DEFAULT_REPO` or a per-project routing table is configured.

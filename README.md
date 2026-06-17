@@ -94,6 +94,14 @@ Run the Node runner locally:
 1. npm run build:node
 2. PORT=3584 npm run start:node
 
+Deploy the Node runner to Daytona:
+
+1. Ensure .dev.vars contains FACTORY_RUNNER_TOKEN, OPENAI_CODEX_REFRESH_TOKEN or OPENAI_CODEX_ACCESS_TOKEN, DAYTONA_API_KEY, and GitHub App credentials.
+2. npm run runner:deploy:daytona
+3. Set FACTORY_RUNNER_URL on the Worker to the printed runnerUrl and FACTORY_RUNNER_TOKEN to the same token.
+
+The deploy script packages the committed source with git archive, uploads it to a public Daytona sandbox, writes runtime secrets to a private .runner.env file inside that sandbox, builds the Node target, starts it as a Daytona background session, and waits for /health. Use --configure-worker to have the script write FACTORY_RUNNER_URL and FACTORY_RUNNER_TOKEN via wrangler secret put.
+
 Required runner env values:
 
 - FACTORY_RUNNER_TOKEN: shared secret for Worker-to-runner admission and stream reads.

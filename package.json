@@ -10,6 +10,7 @@
     "dev": "flue dev --target cloudflare",
     "dev:node": "flue dev --target node",
     "start:node": "node dist-node/server.mjs",
+    "runner:deploy:daytona": "node scripts/deploy-daytona-runner.mjs",
     "deploy": "npm run build:cloudflare && wrangler deploy --config dist/flue_factory/wrangler.json",
     "deploy:dry-run": "npm run build:cloudflare && wrangler deploy --dry-run --config dist/flue_factory/wrangler.json",
     "typecheck": "tsc --noEmit",
