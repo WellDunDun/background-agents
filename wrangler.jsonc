@@ -1,0 +1,22 @@
+{
+  "$schema": "https://workers.cloudflare.com/schema/wrangler.json",
+  "name": "flue-factory",
+  "main": "src/app.ts",
+  "compatibility_date": "2026-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "FlueRegistry",
+        "FlueImplementationAgentAgent",
+        "FlueOrchestratorAgent",
+        "FlueReviewBotAgent",
+        "FlueStartFactoryJobWorkflow"
+      ]
+    }
+  ],
+  "vars": {
+    "FACTORY_DEFAULT_MODEL": "openai-codex/gpt-5.5"
+  }
+}
