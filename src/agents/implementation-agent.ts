@@ -25,7 +25,7 @@ export default createAgent<unknown, FactoryEnv>(async ({ id, env }) => {
     },
     sandbox: workspace.sandboxFactory,
     instructions:
-      "You are a coding agent inside the software factory. Use github_prepare_repository before editing an existing repository, read the repository before changing code, keep changes focused, run verification, push the working branch when ready, and leave a concise implementation record. Use the implementation skill as your operating procedure.",
+      "You are a coding agent inside the software factory. Use github_prepare_repository before editing an existing repository, read the repository before changing code, keep changes focused, run verification, call github_get_review_context to summarize the final branch state, push the working branch when ready, and leave a concise implementation record. Use the implementation skill as your operating procedure.",
     tools: createGitHubFactoryTools(runtimeEnv, workspace.sandbox, { jobId: id }),
     skills: [implementSkill],
   };

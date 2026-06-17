@@ -142,6 +142,41 @@ export function createGitHubFactoryTools(
       },
     }),
     defineTool({
+      name: "github_get_review_context",
+      description:
+        "Collect bounded review evidence from a prepared checkout: branch, head, status, commits, changed files, diff stats, whitespace check, and a truncated diff preview.",
+      parameters: v.object({
+        checkoutDir: v.string(),
+        targetBranch: v.pipe(v.string(), v.description("Base branch to compare against, usually the PR target branch.")),
+      }),
+      execute: async ({ checkoutDir, targetBranch }) => {
+        const safeTargetBranch = sanitizeBranchName(targetBranch);
+        const baseRef = "origin/" + safeTargetBranch;
+        const result = await runCommand(
+          sandbox,
+          [
+            "set -e",
+            "cd " + quotePosix(checkoutDir),
+            "git fetch origin " + quotePosix(safeTargetBranch),
+            sectionCommand("branch", "git branch --show-current"),
+            sectionCommand("head", "git rev-parse HEAD"),
+            sectionCommand("status", "git status --porcelain=v1"),
+            sectionCommand("commits", "git log --oneline --decorate --max-count=20 " + quotePosix(baseRef + "..HEAD")),
+            sectionCommand("name_status", "git diff --name-status " + quotePosix(baseRef + "...HEAD")),
+            sectionCommand("stat", "git diff --stat " + quotePosix(baseRef + "...HEAD")),
+            sectionCommand("check", "git diff --check " + quotePosix(baseRef + "...HEAD") + " || true"),
+            sectionCommand(
+              "diff_preview",
+              "git diff --find-renames --find-copies --unified=80 " + quotePosix(baseRef + "...HEAD") + " | head -c 60000",
+            ),
+          ].join(" && "),
+          checkoutDir,
+          300,
+        );
+        return JSON.stringify(parseReviewContextOutput(result.stdout));
+      },
+    }),
+    defineTool({
       name: "github_commit_all_changes",
       description:
         "Stage every changed file in a prepared checkout and create one commit. Returns committed=false when the worktree is clean.",
@@ -295,6 +330,26 @@ function normalizeCommitMessage(value: string): string {
     .split(/\r?\n/, 1)[0]
     ?.trim();
   return subject ? subject.slice(0, 120) : "chore: apply factory changes";
+}
+
+function sectionCommand(section: string, command: string): string {
+  return "printf " + quotePosix("\n__" + section.toUpperCase() + "__\n") + " && (" + command + ")";
+}
+
+function parseReviewContextOutput(stdout: string): Record<string, string> {
+  const sections: Record<string, string> = {};
+  const pattern = /\n__([A-Z_]+)__\n/g;
+  const matches = Array.from(stdout.matchAll(pattern));
+
+  for (let index = 0; index < matches.length; index++) {
+    const match = matches[index];
+    const section = match[1].toLowerCase();
+    const start = (match.index ?? 0) + match[0].length;
+    const end = matches[index + 1]?.index ?? stdout.length;
+    sections[section] = stdout.slice(start, end).trim();
+  }
+
+  return sections;
 }
 
 function quotePosix(value: string): string {
