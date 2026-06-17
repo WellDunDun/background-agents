@@ -106,6 +106,15 @@ Sentry routing proof:
 - `GET /api/config/status` reports `sentry.webhookConfigured=true`, `sentry.repoMapConfigured=false`, and `sentry.defaultRepo=null`.
 - A signed synthetic webhook could not be sent from this machine because local `.dev.vars` does not currently include `SENTRY_WEBHOOK_SECRET`. Production does have the secret configured, so an end-to-end Sentry delivery test should be run from Sentry or from a local environment that has the matching webhook secret.
 
+Job ledger proof:
+
+- Worker deploy succeeded after the runner job ledger slice: version `fa8dd7e1-519f-4bc5-91e5-facedfb48fae`.
+- Daytona runner deploy succeeded and keeps the job ledger at `/home/daytona/signal-factory-runner-data/jobs.jsonl`, outside the uploaded source directory so runner deploys do not wipe session history.
+- `npm run smoke:production` passed against the live Worker and runner.
+- The smoke admitted a no-repository job with `executionTarget=runner`, streamed 31 events from `openai-codex/gpt-5.5`, saw `agent_end`, and saw no provider/auth error.
+- `GET /api/jobs?limit=10` returned the newly admitted smoke job, and `GET /api/jobs/{instanceId}` returned 200 for the same job.
+- The read-only repository guard still rejected `WellDunDun/canary-compact` with 403 before runner dispatch because the GitHub App installation lacks write access.
+
 Remaining product setup:
 
 - Update the GitHub App installation so at least one target repository has write access. Then run the repo-backed production proof that creates a draft PR and stops before merge.
