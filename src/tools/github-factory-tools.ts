@@ -5,6 +5,7 @@ import * as v from "valibot";
 import type { FactoryEnv } from "../shared/env.js";
 import type { FactoryCommandSandbox } from "../shared/daytona.js";
 import {
+  canWriteRepository,
   commentOnIssue,
   createPullRequest,
   getCachedInstallationToken,
@@ -32,6 +33,14 @@ export function createGitHubFactoryTools(
             private: repo.private,
             defaultBranch: repo.defaultBranch,
             language: repo.language,
+            writable: canWriteRepository(repo),
+            permissions: {
+              admin: Boolean(repo.permissions?.admin),
+              maintain: Boolean(repo.permissions?.maintain),
+              push: Boolean(repo.permissions?.push),
+              triage: Boolean(repo.permissions?.triage),
+              pull: Boolean(repo.permissions?.pull),
+            },
           })),
         });
       },
@@ -51,6 +60,13 @@ export function createGitHubFactoryTools(
         const repository = await getInstallationRepository(config, parsed.owner, parsed.name);
         if (!repository) {
           throw new Error("GitHub App installation cannot access " + repo + ".");
+        }
+        if (!canWriteRepository(repository)) {
+          throw new Error(
+            "GitHub App installation has no write access to " +
+              repo +
+              ". Grant Contents/Pull requests write access and update the app installation before preparing repo-backed work.",
+          );
         }
 
         const token = await getCachedInstallationToken(config);
