@@ -25,6 +25,11 @@ async function main() {
   });
   assertStatus("config", config.status, 200);
 
+  const readiness = await readJson(workerUrl + "/api/readiness", {
+    headers: authHeaders(apiToken),
+  });
+  assertStatus("readiness", readiness.status, 200);
+
   const repositories = await readJson(workerUrl + "/api/github/repositories", {
     headers: authHeaders(apiToken),
   });
@@ -56,6 +61,7 @@ async function main() {
             defaultBranch: repo.defaultBranch,
           })),
         },
+        readiness: summarizeReadiness(readiness.body),
         agentSmoke,
         jobLedger,
         readOnlyGuard,
@@ -352,6 +358,21 @@ function summarizeConfig(config) {
     runner: config?.runner,
     github: config?.github,
     sentry: config?.sentry,
+  };
+}
+
+function summarizeReadiness(readiness) {
+  const checks = Array.isArray(readiness?.checks) ? readiness.checks : [];
+  return {
+    ok: readiness?.ok,
+    state: readiness?.state,
+    summary: readiness?.summary,
+    blockedChecks: checks
+      .filter((check) => check && check.status === "block")
+      .map((check) => check.id),
+    warningChecks: checks
+      .filter((check) => check && check.status === "warn")
+      .map((check) => check.id),
   };
 }
 

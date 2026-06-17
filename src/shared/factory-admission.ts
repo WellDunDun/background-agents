@@ -17,6 +17,12 @@ import {
   type FactoryJobList,
   type FactoryJobRecord,
 } from "./job-ledger.js";
+import {
+  combineFactoryReadiness,
+  getFactoryReadiness,
+  runnerReadinessFailureCheck,
+  type FactoryReadiness,
+} from "./readiness.js";
 
 const DEFAULT_RUNNER_REQUEST_TIMEOUT_MS = 30000;
 
@@ -166,6 +172,33 @@ export async function readFactoryJobRecord(
   return normalizeRunnerJobRecord(body);
 }
 
+export async function readFactoryReadiness(env: FactoryEnv): Promise<FactoryReadiness> {
+  const runtimeEnv = resolveFactoryEnv(env);
+  const workerReadiness = await getFactoryReadiness(runtimeEnv, { runtime: "worker" });
+  const runnerUrl = normalizeRunnerUrl(runtimeEnv.FACTORY_RUNNER_URL);
+  if (!runnerUrl) {
+    return workerReadiness;
+  }
+
+  try {
+    const runnerToken = requireRunnerToken(runtimeEnv);
+    const response = await fetch(runnerUrl + "/api/runner/readiness", {
+      headers: { Authorization: "Bearer " + runnerToken },
+      signal: AbortSignal.timeout(numberFromEnv(runtimeEnv.FACTORY_RUNNER_REQUEST_TIMEOUT_MS) ?? DEFAULT_RUNNER_REQUEST_TIMEOUT_MS),
+    });
+    const body = await parseJsonResponse(response);
+    if (!response.ok) {
+      throw new FactoryAdmissionError(
+        "Factory runner rejected readiness request: " + response.status + " " + describeRunnerError(body),
+        response.status >= 500 ? 502 : response.status,
+      );
+    }
+    return combineFactoryReadiness(workerReadiness, normalizeRunnerReadiness(body));
+  } catch (error) {
+    return combineFactoryReadiness(workerReadiness, runnerFailureReadiness(workerReadiness, error));
+  }
+}
+
 export async function proxyRunnerAgentEvents(
   env: FactoryEnv,
   instanceId: string,
@@ -304,6 +337,38 @@ function normalizeRunnerJobRecord(value: unknown): FactoryJobRecord {
     ...record,
     executionTarget: "runner",
     streamUrl: "/api/jobs/" + encodeURIComponent(record.instanceId) + "/events",
+  };
+}
+
+function normalizeRunnerReadiness(value: unknown): FactoryReadiness {
+  if (!isRecord(value) || !Array.isArray(value.checks) || typeof value.ok !== "boolean") {
+    throw new FactoryAdmissionError("Factory runner returned an invalid readiness response.");
+  }
+
+  return value as unknown as FactoryReadiness;
+}
+
+function runnerFailureReadiness(workerReadiness: FactoryReadiness, error: unknown): FactoryReadiness {
+  const check = runnerReadinessFailureCheck(error);
+  return {
+    ok: false,
+    runtime: "runner",
+    state: "blocked",
+    model: workerReadiness.model,
+    checks: [check],
+    summary: {
+      blocked: 1,
+      warnings: 0,
+    },
+    github: {
+      configured: false,
+      repositoryCount: 0,
+      writableRepositoryCount: 0,
+    },
+    sentry: {
+      webhookConfigured: false,
+      routeConfigured: false,
+    },
   };
 }
 

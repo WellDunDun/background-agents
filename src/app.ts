@@ -13,6 +13,7 @@ import {
   FactoryAdmissionError,
   readFactoryJobList,
   readFactoryJobRecord,
+  readFactoryReadiness,
   proxyRunnerAgentEvents,
 } from "./shared/factory-admission.js";
 import { getFactoryJobRecord, listFactoryJobRecords } from "./shared/job-ledger.js";
@@ -23,6 +24,7 @@ import {
   requireFactoryTransportToken,
 } from "./shared/http-auth.js";
 import { canWriteRepository, getGitHubAppConfig, listInstallationRepositories } from "./shared/github.js";
+import { getFactoryReadiness } from "./shared/readiness.js";
 import {
   isAcceptedSentryLevel,
   normalizeSentrySignal,
@@ -121,6 +123,15 @@ app.get("/api/runner/jobs/:instanceId", async (c) => {
   return record ? c.json(record) : c.json({ error: "Job not found." }, 404);
 });
 
+app.get("/api/runner/readiness", async (c) => {
+  const authError = requireFactoryRunnerToken(c);
+  if (authError) {
+    return authError;
+  }
+
+  return c.json(await getFactoryReadiness(resolveFactoryEnv(c.env), { runtime: "runner" }));
+});
+
 app.get("/api/jobs/:instanceId/events", async (c) => {
   const authError = requireFactoryApiToken(c);
   if (authError) {
@@ -141,6 +152,15 @@ app.get("/api/config/status", (c) => {
   return c.json({
     ...configStatus(resolveFactoryEnv(c.env)),
   });
+});
+
+app.get("/api/readiness", async (c) => {
+  const authError = requireFactoryApiToken(c);
+  if (authError) {
+    return authError;
+  }
+
+  return c.json(await readFactoryReadiness(resolveFactoryEnv(c.env)));
 });
 
 app.get("/api/github/repositories", async (c) => {

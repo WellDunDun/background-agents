@@ -34,7 +34,7 @@ Flue builds the deployable Cloudflare Worker into dist/flue_factory. The deploy 
 
 Flue builds the Node runner into dist-node. Start it with npm run start:node after supplying runtime environment variables.
 
-Run npm run smoke:production after a deploy to verify the live Worker health route, protected config status, GitHub repository readiness endpoint, read-only repository guard when applicable, and a non-repository Codex-backed live agent stream. The smoke script reads secrets from .dev.vars or the process environment and does not print token values.
+Run npm run smoke:production after a deploy to verify the live Worker health route, protected config status, production readiness endpoint, GitHub repository readiness endpoint, read-only repository guard when applicable, job ledger list/detail, and a non-repository Codex-backed live agent stream. The smoke script reads secrets from .dev.vars or the process environment and does not print token values.
 
 ## Configuration
 
@@ -78,6 +78,8 @@ Send Authorization: Bearer <FACTORY_API_TOKEN>. The Worker uses FACTORY_RUNNER_T
 GET /api/jobs lists recent app-owned factory job admission records. GET /api/jobs/{instanceId} returns one record. In production these endpoints proxy to the Node runner ledger through FACTORY_RUNNER_TOKEN and rewrite streamUrl to the Worker event proxy.
 
 GET /api/config/status returns non-secret configuration readiness for the operator UI or deployment smoke tests. It also requires Authorization: Bearer <FACTORY_API_TOKEN>.
+
+GET /api/readiness returns non-secret production readiness checks with pass/warn/block statuses for Worker ingress, runner runtime, Codex auth, workspace configuration, GitHub App access, writable GitHub repositories, GitHub webhook, Sentry webhook, and Sentry repository routing. It requires Authorization: Bearer <FACTORY_API_TOKEN>. When FACTORY_RUNNER_URL is configured, the Worker reads the runner's protected /api/runner/readiness endpoint and combines both scopes so runner-owned secrets do not need to be duplicated in the Worker. This endpoint is intended for the operator UI and deployment smoke tests; it reports external setup blockers without exposing secret values.
 
 GET /api/github/repositories returns the GitHub App installation repositories visible to the factory, including default branch and write-readiness flags for repo selection UIs. It requires Authorization: Bearer <FACTORY_API_TOKEN>. A repo-backed job needs a repository where writable=true; otherwise the agent can inspect but cannot push a factory branch or create the draft PR.
 
