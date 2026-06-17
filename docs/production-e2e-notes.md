@@ -61,4 +61,20 @@ The next production proof requires hosting the Node runner, setting FACTORY_RUNN
 
 Daytona runner deployment is scripted with npm run runner:deploy:daytona. The script creates or reuses a public Daytona sandbox named signal-factory-runner, uploads the committed source archive, writes runner secrets to .runner.env inside the sandbox, builds dist-node, starts npm run start:node as a Daytona background session, and returns the public preview URL. The Worker should store that URL in FACTORY_RUNNER_URL and the shared token in FACTORY_RUNNER_TOKEN.
 
+## Production Proof on 2026-06-17
+
+Proven:
+
+- Cloudflare Worker deploy succeeds and serves /health.
+- /api/config/status is protected by FACTORY_API_TOKEN and reports runner.configured=true.
+- Daytona runner deploy succeeds on a public Daytona sandbox and starts the Flue Node target.
+- Worker /api/jobs forwards admission to the Daytona runner and returns executionTarget=runner.
+- Worker /api/jobs/{instanceId}/events proxies the runner's Flue event stream with FACTORY_API_TOKEN.
+- Runner workspace mode avoids nested Daytona sandbox proxy failures by using the Daytona runner sandbox as the Flue local workspace boundary.
+- The stream reaches the openai-codex provider; there is no longer a Cloudflare Worker block page.
+
+Current blocker:
+
+- The copied Codex OAuth refresh token is invalid with refresh_token_reused. A fresh ChatGPT/Codex sign-in is required once, then the runner can be redeployed. The code now persists rotated Codex credentials to .runner.env through FACTORY_CODEX_CREDENTIALS_PATH, so a valid refresh token should not be reused after the next successful refresh.
+
 Sentry is not fully actionable until `SENTRY_DEFAULT_REPO` or a per-project routing table is configured.
