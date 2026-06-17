@@ -124,6 +124,15 @@ Readiness proof:
 - `GET /api/readiness` returned exactly one warning, `worker:sentry-route`, because Sentry is signed/configured but still has no `SENTRY_REPO_MAP` or `SENTRY_DEFAULT_REPO`.
 - The same smoke still admitted a no-repository runner job, streamed 31 events from `openai-codex/gpt-5.5`, saw `agent_end`, saw no provider/auth error, listed the new job through the app-owned ledger, and rejected the known read-only repo with 403.
 
+Idempotency proof:
+
+- Worker deploy succeeded after the idempotent admission slice: version `0752f257-8837-4d8f-9510-5e897afa03fe`.
+- Daytona runner deploy succeeded after adding stage-level runner deploy logs and refreshed the Worker's runner URL/token secrets.
+- `npm run smoke:production` passed against the live Worker and runner.
+- The smoke sent a no-repository job with `Idempotency-Key`, streamed the original job to `agent_end`, then resent the same request with the same key.
+- The duplicate admission returned 202 with `duplicateReused=true` and the same `manual:smoke-...` instance id instead of starting a second agent run.
+- The same smoke still reached `openai-codex/gpt-5.5`, saw no provider/auth error, listed the smoke job through the app-owned ledger, and rejected the known read-only repo with 403.
+
 Remaining product setup:
 
 - Update the GitHub App installation so at least one target repository has write access. Then run the repo-backed production proof that creates a draft PR and stops before merge.
