@@ -176,6 +176,14 @@ Agent GitHub write-readiness proof:
 - The smoke still reported one visible repository and zero writable repositories, and the read-only admission guard rejected `WellDunDun/canary-compact` with 403 before runner dispatch.
 - The same smoke still reached `openai-codex/gpt-5.5`, completed with `agent_end`, returned `duplicateReused=true`, listed the smoke job through the ledger, and proved GitHub/Sentry runtime config PATCH/restore.
 
+GitHub installation writability fix:
+
+- After the GitHub App installation was changed to all repositories, production listed 88 repositories but initially marked all of them `writable=false`.
+- A direct GitHub App probe showed the installation itself was correct: `repository_selection=all`, `contents=write`, `pull_requests=write`, and `issues=write`.
+- The bug was in the factory adapter: it trusted repository payload `permissions.push`, which GitHub returns as false for these installation-token repository payloads even when the installation token itself has write permissions.
+- The adapter now carries installation-token permissions into repository readiness and treats repositories as writable when the installation token has `contents=write` and `pull_requests=write`.
+- Production verification after deploy shows 88 visible repositories, 88 writable repositories, `/api/readiness` with zero blockers, and only the expected `worker:sentry-route` warning.
+
 Remaining product setup:
 
 - Update the GitHub App installation so at least one target repository has write access. Then run the repo-backed production proof that creates a draft PR and stops before merge.
