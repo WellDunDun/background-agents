@@ -27,6 +27,7 @@ export interface InstallationRepository {
   language?: string | null;
   topics?: string[];
   permissions?: GitHubRepositoryPermissions;
+  installationPermissions?: GitHubInstallationPermissions;
 }
 
 export interface GitHubRepositoryPermissions {
@@ -37,11 +38,22 @@ export interface GitHubRepositoryPermissions {
   pull?: boolean;
 }
 
-export function canWriteRepository(repository: Pick<InstallationRepository, "permissions">): boolean {
+export interface GitHubInstallationPermissions {
+  contents?: string;
+  issues?: string;
+  metadata?: string;
+  pull_requests?: string;
+}
+
+export function canWriteRepository(
+  repository: Pick<InstallationRepository, "permissions" | "installationPermissions">,
+): boolean {
   return Boolean(
     repository.permissions?.admin ||
       repository.permissions?.maintain ||
-      repository.permissions?.push,
+      repository.permissions?.push ||
+      (repository.installationPermissions?.contents === "write" &&
+        repository.installationPermissions?.pull_requests === "write"),
   );
 }
 
@@ -60,11 +72,15 @@ interface CachedInstallationToken {
   token: string;
   expiresAtEpochMs: number;
   cachedAtEpochMs: number;
+  permissions?: GitHubInstallationPermissions;
+  repositorySelection?: string;
 }
 
 interface InstallationTokenResponse {
   token: string;
   expires_at: string;
+  permissions?: GitHubInstallationPermissions;
+  repository_selection?: string;
 }
 
 export function getGitHubAppConfig(env: FactoryEnv): GitHubAppConfig {
@@ -97,10 +113,11 @@ export async function getInstallationRepository(
 ): Promise<InstallationRepository | null> {
   let forceRefresh = false;
   let response: Response | undefined;
+  let cachedToken: CachedInstallationToken | undefined;
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    const token = await getCachedInstallationToken(config, { forceRefresh });
-    response = await githubFetch(GITHUB_API_BASE + "/repos/" + owner + "/" + repo, token);
+    cachedToken = await getOrRefreshCachedInstallationToken(config, forceRefresh);
+    response = await githubFetch(GITHUB_API_BASE + "/repos/" + owner + "/" + repo, cachedToken.token);
 
     if (response.status !== 401) {
       break;
@@ -146,20 +163,21 @@ export async function getInstallationRepository(
     language: data.language,
     topics: data.topics,
     permissions: data.permissions,
+    installationPermissions: cachedToken?.permissions,
   };
 }
 
 export async function listInstallationRepositories(
   config: GitHubAppConfig,
 ): Promise<InstallationRepository[]> {
-  const token = await getCachedInstallationToken(config);
+  const cachedToken = await getOrRefreshCachedInstallationToken(config, false);
   const repos: InstallationRepository[] = [];
   let page = 1;
 
   while (page <= 20) {
     const response = await githubFetch(
       GITHUB_API_BASE + "/installation/repositories?per_page=100&page=" + page,
-      token,
+      cachedToken.token,
     );
     if (!response.ok) {
       throw new Error("Failed to list installation repositories: " + response.status + " " + (await response.text()));
@@ -192,6 +210,7 @@ export async function listInstallationRepositories(
         language: repo.language,
         topics: repo.topics,
         permissions: repo.permissions,
+        installationPermissions: cachedToken.permissions,
       })),
     );
 
@@ -373,6 +392,8 @@ async function refreshInstallationToken(config: GitHubAppConfig): Promise<Cached
       ? parsedExpiresAtEpochMs
       : nowEpochMs + TOKEN_CACHE_MAX_AGE_MS,
     cachedAtEpochMs: nowEpochMs,
+    permissions: data.permissions,
+    repositorySelection: data.repository_selection,
   };
 
   installationTokenCache.set(getInstallationTokenCacheKey(config), cached);
